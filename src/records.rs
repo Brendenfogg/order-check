@@ -375,3 +375,9 @@ mod tests {
         std::fs::remove_file(&path).unwrap();
     }
 }
+
+/// Fills the store with plausible synthetic records marked `mode = "demo"`,
+/// so the dashboard can be shown before any real orders exist.
+pub fn seed_demo(_records: &Records, _menu: &Menu, _n: u32) -> anyhow::Result<()> {
+    anyhow::bail!("seed_demo arrives in Task 11")
+}

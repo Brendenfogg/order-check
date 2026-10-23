@@ -5,14 +5,18 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.104"
+axum = { version = "0.8.9", features = ["ws"] }
 clap = { version = "4.6.7", features = ["derive"] }
+cpal = "0.18.2"
 hound = "3.5.1"
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 strsim = "0.11.1"
 thiserror = "2.0.21"
+tokio = { version = "1.54.1", features = ["full"] }
 toml = "1.1.8"
+tower-http = { version = "0.7.1", features = ["fs"] }
 whisper-rs = { version = "0.16.0", features = ["metal"] }
 
 [[bin]]
@@ -22,3 +26,7 @@ path = "src/main.rs"
 # whisper.cpp is unusably slow unoptimized; keep it fast in test builds too.
 [profile.dev.package.whisper-rs-sys]
 opt-level = 3
+
+[dev-dependencies]
+http-body-util = "0.1.5"
+tower = { version = "0.5.3", features = ["util"] }
