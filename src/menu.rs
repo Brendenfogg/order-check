@@ -154,7 +154,10 @@ impl Menu {
             }
         }
         if self.item(&self.meal.default_side).is_none() {
-            bail!("meal default_side is unknown item {}", self.meal.default_side);
+            bail!(
+                "meal default_side is unknown item {}",
+                self.meal.default_side
+            );
         }
         Ok(())
     }
@@ -175,7 +178,11 @@ impl Menu {
     pub fn vocabulary_prompt(&self) -> String {
         let mut seen = HashSet::new();
         let mut prompt = String::new();
-        let names = self.items.iter().map(|i| &i.name).chain(self.modifiers.iter().map(|m| &m.name));
+        let names = self
+            .items
+            .iter()
+            .map(|i| &i.name)
+            .chain(self.modifiers.iter().map(|m| &m.name));
         for name in names {
             if !seen.insert(name.as_str()) {
                 continue;
@@ -191,7 +198,10 @@ impl Menu {
     }
 }
 
-fn index_ids<'a>(ids: impl Iterator<Item = &'a str>, what: &str) -> anyhow::Result<HashMap<String, usize>> {
+fn index_ids<'a>(
+    ids: impl Iterator<Item = &'a str>,
+    what: &str,
+) -> anyhow::Result<HashMap<String, usize>> {
     let mut map = HashMap::new();
     for (i, id) in ids.enumerate() {
         if map.insert(id.to_string(), i).is_some() {
@@ -203,7 +213,11 @@ fn index_ids<'a>(ids: impl Iterator<Item = &'a str>, what: &str) -> anyhow::Resu
 
 #[cfg(test)]
 pub(crate) fn cfa() -> Menu {
-    Menu::load(Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/menus/chick-fil-a.toml"))).unwrap()
+    Menu::load(Path::new(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/menus/chick-fil-a.toml"
+    )))
+    .unwrap()
 }
 
 #[cfg(test)]
@@ -251,13 +265,19 @@ mod tests {
 
     #[test]
     fn validate_rejects_unknown_refs() {
-        let bad_mod = SMALL.replace(r#"modifiers = ["no_salt"]"#, r#"modifiers = ["no_such_mod"]"#);
+        let bad_mod = SMALL.replace(
+            r#"modifiers = ["no_salt"]"#,
+            r#"modifiers = ["no_such_mod"]"#,
+        );
         assert!(err_of(&bad_mod).contains("no_such_mod"));
 
         let bad_lto = SMALL.replace("lto_items = []", r#"lto_items = ["ghost_shake"]"#);
         assert!(err_of(&bad_lto).contains("ghost_shake"));
 
-        let bad_side = SMALL.replace(r#"default_side = "fries""#, r#"default_side = "onion_rings""#);
+        let bad_side = SMALL.replace(
+            r#"default_side = "fries""#,
+            r#"default_side = "onion_rings""#,
+        );
         assert!(err_of(&bad_side).contains("onion_rings"));
 
         let bad_family = format!("{SMALL}\n[[families]]\nid = \"fries\"\nbase = \"curly\"\n");

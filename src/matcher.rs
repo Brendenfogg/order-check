@@ -82,15 +82,20 @@ const CUES: &[(&str, Cue)] = &[
     ("not", Cue::Negation),
 ];
 
-const SIZES: &[(&str, Size)] = &[("small", Size::Sm), ("medium", Size::Md), ("large", Size::Lg), ("big", Size::Lg)];
+const SIZES: &[(&str, Size)] = &[
+    ("small", Size::Sm),
+    ("medium", Size::Md),
+    ("large", Size::Lg),
+    ("big", Size::Lg),
+];
 const FAMILY_BASE: &[&str] = &["regular", "original", "normal"];
 const MEAL: &[&str] = &["meal", "combo"];
 const ARTICLES: &[&str] = &["a", "an"];
 
 /// Words that never start or end a fuzzy match ("the chicken" is not an item).
 const STOP_WORDS: &[&str] = &[
-    "a", "an", "the", "and", "i", "can", "get", "please", "with", "to", "of", "it", "that", "is", "you", "me",
-    "for", "my", "some", "have", "will", "be", "do", "on", "in", "your", "our", "so",
+    "a", "an", "the", "and", "i", "can", "get", "please", "with", "to", "of", "it", "that", "is",
+    "you", "me", "for", "my", "some", "have", "will", "be", "do", "on", "in", "your", "our", "so",
 ];
 
 const MAX_NGRAM: usize = 6;
@@ -177,11 +182,19 @@ impl Matcher {
         let mut out = Vec::new();
         let mut i = 0;
         while i < tokens.len() {
-            if let Some(m) = self.exact_at(tokens, i).or_else(|| self.fuzzy_at(tokens, i)) {
+            if let Some(m) = self
+                .exact_at(tokens, i)
+                .or_else(|| self.fuzzy_at(tokens, i))
+            {
                 i = m.end;
                 out.push(m);
             } else if let Ok(n) = tokens[i].parse::<u32>() {
-                out.push(Mention { kind: MentionKind::Quantity(n), start: i, end: i + 1, score: 1.0 });
+                out.push(Mention {
+                    kind: MentionKind::Quantity(n),
+                    start: i,
+                    end: i + 1,
+                    score: 1.0,
+                });
                 i += 1;
             } else {
                 i += 1;
@@ -194,8 +207,17 @@ impl Matcher {
         let max = MAX_NGRAM.min(tokens.len() - i);
         for n in (1..=max).rev() {
             let gram = &tokens[i..i + n];
-            if let Some(kind) = self.exact.get(gram).or_else(|| self.exact.get(&singular(gram)?)) {
-                return Some(Mention { kind: kind.clone(), start: i, end: i + n, score: 1.0 });
+            if let Some(kind) = self
+                .exact
+                .get(gram)
+                .or_else(|| self.exact.get(&singular(gram)?))
+            {
+                return Some(Mention {
+                    kind: kind.clone(),
+                    start: i,
+                    end: i + n,
+                    score: 1.0,
+                });
             }
         }
         None
@@ -206,7 +228,8 @@ impl Matcher {
         let max = MAX_FUZZY_NGRAM.min(tokens.len() - i);
         for n in 1..=max {
             let gram = &tokens[i..i + n];
-            if STOP_WORDS.contains(&gram[0].as_str()) || STOP_WORDS.contains(&gram[n - 1].as_str()) {
+            if STOP_WORDS.contains(&gram[0].as_str()) || STOP_WORDS.contains(&gram[n - 1].as_str())
+            {
                 continue;
             }
             if gram.iter().any(|t| t.chars().all(|c| c.is_ascii_digit())) {
@@ -229,7 +252,12 @@ impl Matcher {
                 }
             }
         }
-        best.map(|(score, n, kind)| Mention { kind: kind.clone(), start: i, end: i + n, score: score.min(FUZZY_MAX_SCORE) as f32 })
+        best.map(|(score, n, kind)| Mention {
+            kind: kind.clone(),
+            start: i,
+            end: i + n,
+            score: score.min(FUZZY_MAX_SCORE) as f32,
+        })
     }
 }
 
@@ -237,7 +265,11 @@ fn push_fuzzy(fuzzy: &mut Vec<FuzzyEntry>, phrase: &str, kind: MentionKind) {
     let tokens = normalize(phrase);
     let compact = tokens.concat();
     if compact.len() >= FUZZY_MIN_LEN {
-        fuzzy.push(FuzzyEntry { spaced: tokens.join(" "), compact, kind });
+        fuzzy.push(FuzzyEntry {
+            spaced: tokens.join(" "),
+            compact,
+            kind,
+        });
     }
 }
 
@@ -257,13 +289,20 @@ mod tests {
     use crate::normalize::normalize;
 
     fn kinds(text: &str) -> Vec<MentionKind> {
-        Matcher::new(&cfa()).find(&normalize(text)).into_iter().map(|m| m.kind).collect()
+        Matcher::new(&cfa())
+            .find(&normalize(text))
+            .into_iter()
+            .map(|m| m.kind)
+            .collect()
     }
 
     fn no_menu_words(text: &str) -> bool {
-        kinds(text)
-            .iter()
-            .all(|k| !matches!(k, MentionKind::Item(_) | MentionKind::Family(_) | MentionKind::Modifier(_)))
+        kinds(text).iter().all(|k| {
+            !matches!(
+                k,
+                MentionKind::Item(_) | MentionKind::Family(_) | MentionKind::Modifier(_)
+            )
+        })
     }
 
     fn item(id: &str) -> MentionKind {
@@ -272,7 +311,10 @@ mod tests {
 
     #[test]
     fn exact_items_and_quantity() {
-        assert_eq!(kinds("can i get 3 polynesian sauces"), [MentionKind::Quantity(3), item("polynesian")]);
+        assert_eq!(
+            kinds("can i get 3 polynesian sauces"),
+            [MentionKind::Quantity(3), item("polynesian")]
+        );
     }
 
     #[test]
@@ -283,7 +325,10 @@ mod tests {
 
     #[test]
     fn count_alias() {
-        assert_eq!(kinds("a twelve count nugget meal"), [MentionKind::Article, item("nuggets_12"), MentionKind::Meal]);
+        assert_eq!(
+            kinds("a twelve count nugget meal"),
+            [MentionKind::Article, item("nuggets_12"), MentionKind::Meal]
+        );
     }
 
     #[test]
@@ -291,12 +336,23 @@ mod tests {
         let ms = Matcher::new(&cfa()).find(&normalize("polly nesian"));
         assert_eq!(ms.len(), 1);
         assert_eq!(ms[0].kind, item("polynesian"));
-        assert!(ms[0].score >= 0.85 && ms[0].score < 1.0, "score {}", ms[0].score);
+        assert!(
+            ms[0].score >= 0.85 && ms[0].score < 1.0,
+            "score {}",
+            ms[0].score
+        );
     }
 
     #[test]
     fn fuzzy_misspelling() {
-        assert_eq!(kinds("a large lemmonade"), [MentionKind::Article, MentionKind::Size(Size::Lg), item("lemonade")]);
+        assert_eq!(
+            kinds("a large lemmonade"),
+            [
+                MentionKind::Article,
+                MentionKind::Size(Size::Lg),
+                item("lemonade")
+            ]
+        );
     }
 
     #[test]
@@ -309,7 +365,12 @@ mod tests {
     fn cues() {
         assert_eq!(
             kinds("actually make that a large"),
-            [MentionKind::Cue(Cue::Correction), MentionKind::Cue(Cue::Correction), MentionKind::Article, MentionKind::Size(Size::Lg)]
+            [
+                MentionKind::Cue(Cue::Correction),
+                MentionKind::Cue(Cue::Correction),
+                MentionKind::Article,
+                MentionKind::Size(Size::Lg)
+            ]
         );
     }
 
@@ -327,13 +388,23 @@ mod tests {
 
     #[test]
     fn regular_is_family_base_unless_part_of_item() {
-        assert_eq!(kinds("regular not spicy"), [MentionKind::FamilyBase, MentionKind::Cue(Cue::Negation), item("spicy_sandwich")]);
+        assert_eq!(
+            kinds("regular not spicy"),
+            [
+                MentionKind::FamilyBase,
+                MentionKind::Cue(Cue::Negation),
+                item("spicy_sandwich")
+            ]
+        );
         assert_eq!(kinds("regular lemonade"), [item("lemonade")]);
     }
 
     #[test]
     fn modifier_beats_decline() {
-        assert_eq!(kinds("no pickles"), [MentionKind::Modifier("no_pickles".into())]);
+        assert_eq!(
+            kinds("no pickles"),
+            [MentionKind::Modifier("no_pickles".into())]
+        );
         assert_eq!(kinds("no thanks"), [MentionKind::Cue(Cue::Decline)]);
     }
 
@@ -344,7 +415,10 @@ mod tests {
 
     #[test]
     fn additive_after_number_words() {
-        assert_eq!(kinds("one more cookie"), [MentionKind::Cue(Cue::Additive), item("cookie")]);
+        assert_eq!(
+            kinds("one more cookie"),
+            [MentionKind::Cue(Cue::Additive), item("cookie")]
+        );
     }
 
     #[test]
