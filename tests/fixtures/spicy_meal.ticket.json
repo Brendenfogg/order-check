@@ -1,0 +1,13 @@
+{
+  "lines": [
+    {
+      "item": "chicken_sandwich",
+      "qty": 1,
+      "meal": {
+        "side": { "item": "waffle_fries", "size": "md" },
+        "drink": { "item": "sweet_tea", "size": "md" }
+      }
+    },
+    { "item": "polynesian", "qty": 1 }
+  ]
+}

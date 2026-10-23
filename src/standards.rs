@@ -6,7 +6,11 @@ use crate::extract::{SpokenOrder, Utterance};
 use crate::menu::{Menu, StandardKind};
 use crate::normalize::normalize;
 
-pub fn check_standards(menu: &Menu, utts: &[Utterance], spoken: &SpokenOrder) -> BTreeMap<String, bool> {
+pub fn check_standards(
+    menu: &Menu,
+    utts: &[Utterance],
+    spoken: &SpokenOrder,
+) -> BTreeMap<String, bool> {
     let heard: Vec<Vec<String>> = utts.iter().map(|u| normalize(&u.text)).collect();
     menu.standards
         .iter()
@@ -14,9 +18,14 @@ pub fn check_standards(menu: &Menu, utts: &[Utterance], spoken: &SpokenOrder) ->
             let met = match std.kind {
                 StandardKind::Phrase => std.phrases.iter().any(|p| {
                     let p = normalize(p);
-                    !p.is_empty() && heard.iter().any(|toks| toks.windows(p.len()).any(|w| w == p.as_slice()))
+                    !p.is_empty()
+                        && heard
+                            .iter()
+                            .any(|toks| toks.windows(p.len()).any(|w| w == p.as_slice()))
                 }),
-                StandardKind::OfferLto => spoken.offered.iter().any(|id| menu.lto_items.contains(id)),
+                StandardKind::OfferLto => {
+                    spoken.offered.iter().any(|id| menu.lto_items.contains(id))
+                }
             };
             (std.id.clone(), met)
         })
@@ -45,13 +54,19 @@ mod tests {
             "No thanks.",
             "My pleasure!",
         ]);
-        assert_eq!(r, BTreeMap::from([("my_pleasure".into(), true), ("offered_lto".into(), true)]));
+        assert_eq!(
+            r,
+            BTreeMap::from([("my_pleasure".into(), true), ("offered_lto".into(), true)])
+        );
     }
 
     #[test]
     fn standards_missed() {
         let r = run(&["Hi, a lemonade please", "Thanks, we'll bring it out"]);
-        assert_eq!(r, BTreeMap::from([("my_pleasure".into(), false), ("offered_lto".into(), false)]));
+        assert_eq!(
+            r,
+            BTreeMap::from([("my_pleasure".into(), false), ("offered_lto".into(), false)])
+        );
     }
 
     #[test]
