@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Order Check Dashboard</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    color-scheme: light;
+    --surface-0: #f3f2ef;
+    --surface-1: #fcfcfb;
+    --border: #e2e0da;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #85837d;
+    --grid: #ecebe7;
+    --series-1: #2a78d6;
+    --badge-bg: #fff4d6;
+    --badge-fg: #8a5a00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --surface-0: #111110;
+      --surface-1: #1a1a19;
+      --border: #2e2d2b;
+      --text-primary: #f0efec;
+      --text-secondary: #c3c2b7;
+      --text-muted: #8d8b84;
+      --grid: #262624;
+      --series-1: #3987e5;
+      --badge-bg: #3a2e10;
+      --badge-fg: #f2cf7a;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface-0: #111110;
+    --surface-1: #1a1a19;
+    --border: #2e2d2b;
+    --text-primary: #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted: #8d8b84;
+    --grid: #262624;
+    --series-1: #3987e5;
+    --badge-bg: #3a2e10;
+    --badge-fg: #f2cf7a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--surface-0); color: var(--text-primary); font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px; }
+  header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+  h1 { font-size: 22px; margin: 0; }
+  .sub { color: var(--text-secondary); margin: 0 0 20px; font-size: 14px; }
+  .badge { background: var(--badge-bg); color: var(--badge-fg); font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 6px; }
+  .filters { margin-left: auto; display: flex; gap: 4px; background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; padding: 3px; }
+  .filters button { border: none; background: none; color: var(--text-secondary); padding: 6px 12px; border-radius: 6px; font-weight: 600; cursor: pointer; }
+  .filters button.on { background: var(--surface-0); color: var(--text-primary); }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .tile, .panel { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .tile .label { color: var(--text-secondary); font-size: 13px; }
+  .tile .value { font-size: 30px; font-weight: 700; margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .tile .hint { color: var(--text-muted); font-size: 12px; margin-top: 4px; }
+  .panels { display: grid; grid-template-columns: 1.4fr 1fr; gap: 12px; }
+  .panel h2 { font-size: 15px; margin: 0 0 2px; }
+  .panel p.desc { color: var(--text-muted); font-size: 12px; margin: 0 0 14px; }
+  .wide { grid-column: 1 / -1; }
+  @media (max-width: 760px) { .panels { grid-template-columns: 1fr; } }
+
+  .cols { position: relative; height: 180px; display: flex; align-items: flex-end; gap: 2px; border-bottom: 1px solid var(--grid);
+          background: repeating-linear-gradient(to top, transparent 0 44px, var(--grid) 44px 45px); }
+  .col { flex: 1; height: 100%; display: flex; align-items: flex-end; cursor: default; }
+  .col .bar { width: 100%; background: var(--series-1); border-radius: 4px 4px 0 0; min-height: 1px; }
+  .col:hover .bar, .col:focus .bar { filter: brightness(1.15); }
+  .xlabels { display: flex; gap: 2px; margin-top: 4px; }
+  .xlabels span { flex: 1; text-align: center; font-size: 11px; color: var(--text-muted); }
+
+  .hbars { display: grid; grid-template-columns: 110px 1fr 40px; gap: 8px 10px; align-items: center; }
+  .hbars .name { font-size: 13px; color: var(--text-secondary); }
+  .hbars .track { height: 14px; }
+  .hbars .fill { height: 100%; background: var(--series-1); border-radius: 0 4px 4px 0; min-width: 2px; }
+  .hbars .num { font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; color: var(--text-muted); font-weight: 600; padding: 6px 4px; border-bottom: 1px solid var(--border); }
+  td { padding: 7px 4px; border-bottom: 1px solid var(--grid); }
+  td.n { text-align: right; font-variant-numeric: tabular-nums; }
+  .arrow { color: var(--text-muted); padding: 0 6px; }
+  details { margin-top: 10px; font-size: 12px; color: var(--text-secondary); }
+  .empty { color: var(--text-muted); font-size: 13px; padding: 20px 0; }
+  .tip { position: fixed; pointer-events: none; background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--border);
+         border-radius: 8px; padding: 6px 10px; font-size: 12px; box-shadow: 0 4px 14px #0002; display: none; }
+  .tip strong { display: block; font-size: 14px; }
+  .privacy { color: var(--text-muted); font-size: 12px; margin-top: 18px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Order Check</h1>
+    <span class="badge" id="demoBadge" hidden>Demo data</span>
+    <div class="filters" role="group" aria-label="Time range">
+      <button data-hours="24" class="on">Last 24 hours</button>
+      <button data-hours="168">Last 7 days</button>
+    </div>
+  </header>
+  <p class="sub">Mistakes caught before they reached the kitchen. Restaurant-level only: no employee names, no conversations.</p>
+
+  <section class="kpis" id="kpis"></section>
+
+  <section class="panels">
+    <div class="panel">
+      <h2>Mistakes caught by hour</h2>
+      <p class="desc">Each bar is one hour of the day.</p>
+      <div id="hourly"></div>
+    </div>
+    <div class="panel">
+      <h2>Mistakes by type</h2>
+      <p class="desc">What kind of mistake the check found.</p>
+      <div id="kinds"></div>
+    </div>
+    <div class="panel">
+      <h2>Most mixed-up items</h2>
+      <p class="desc">What the guest said, and what got rung in instead.</p>
+      <div id="pairs"></div>
+    </div>
+    <div class="panel">
+      <h2>Service standards</h2>
+      <p class="desc">Share of orders where each standard was met (optional; team-level).</p>
+      <div id="standards"></div>
+    </div>
+  </section>
+  <p class="privacy">Every record is anonymous: an order number, a time, what kind of mistake was caught, and whether it was fixed.</p>
+</main>
+<div class="tip" id="tip"></div>
+
+<script>
+const KIND_NAMES = { variant: 'Look-alike item', count: 'Wrong count', size: 'Wrong size', modifier: 'Modifier', missing: 'Missing item', extra: 'Extra item' };
+const STANDARD_NAMES = { my_pleasure: 'Said "My pleasure"', offered_lto: 'Offered the seasonal item' };
+const $ = id => document.getElementById(id);
+let hours = 24;
+
+function el(tag, props = {}, children = []) {
+  const e = document.createElement(tag);
+  Object.entries(props).forEach(([k, v]) => k === 'text' ? e.textContent = v : k === 'class' ? e.className = v : e.setAttribute(k, v));
+  children.forEach(c => e.appendChild(c));
+  return e;
+}
+const pct = x => Math.round(x * 100) + '%';
+
+function tile(label, value, hint) {
+  return el('div', { class: 'tile' }, [el('div', { class: 'label', text: label }), el('div', { class: 'value', text: value }), el('div', { class: 'hint', text: hint || '' })]);
+}
+
+function showTip(e, value, label) {
+  const t = $('tip');
+  t.replaceChildren(el('strong', { text: value }), document.createTextNode(label));
+  t.style.display = 'block';
+  t.style.left = Math.min(e.clientX + 12, innerWidth - 180) + 'px';
+  t.style.top = (e.clientY - 44) + 'px';
+}
+const hideTip = () => $('tip').style.display = 'none';
+
+function hourLabel(h) { return h === 0 ? '12a' : h < 12 ? h + 'a' : h === 12 ? '12p' : (h - 12) + 'p'; }
+
+function renderHourly(d) {
+  const byHour = new Map(d.by_hour.map(([h, orders, caught]) => [h, { orders, caught }]));
+  const hrs = d.by_hour.length ? d.by_hour.map(r => r[0]) : [];
+  const box = $('hourly');
+  if (!hrs.length) return box.replaceChildren(el('div', { class: 'empty', text: 'No orders in this period yet.' }));
+  const first = Math.min(...hrs), last = Math.max(...hrs);
+  const range = []; for (let h = first; h <= last; h++) range.push(h);
+  const max = Math.max(1, ...range.map(h => (byHour.get(h) || {}).caught || 0));
+  const cols = el('div', { class: 'cols' });
+  const labels = el('div', { class: 'xlabels' });
+  const rows = [];
+  range.forEach(h => {
+    const r = byHour.get(h) || { orders: 0, caught: 0 };
+    const col = el('div', { class: 'col', tabindex: '0', 'aria-label': `${hourLabel(h)}: ${r.caught} caught of ${r.orders} orders` },
+      [el('div', { class: 'bar', style: `height:${(r.caught / max) * 100}%` })]);
+    const tip = e => showTip(e.clientX ? e : { clientX: col.getBoundingClientRect().left, clientY: col.getBoundingClientRect().top }, `${r.caught} caught`, `${hourLabel(h)} · ${r.orders} orders`);
+    col.addEventListener('pointermove', tip); col.addEventListener('focus', tip);
+    col.addEventListener('pointerleave', hideTip); col.addEventListener('blur', hideTip);
+    cols.appendChild(col);
+    labels.appendChild(el('span', { text: (h - first) % 2 === 0 ? hourLabel(h) : '' }));
+    rows.push(el('tr', {}, [el('td', { text: hourLabel(h) }), el('td', { class: 'n', text: r.orders }), el('td', { class: 'n', text: r.caught })]));
+  });
+  const table = el('table', {}, [el('tr', {}, [el('th', { text: 'Hour' }), el('th', { text: 'Orders' }), el('th', { text: 'Caught' })]), ...rows]);
+  box.replaceChildren(cols, labels, el('details', {}, [el('summary', { text: 'Show as table' }), table]));
+}
+
+function renderKinds(d) {
+  const entries = Object.entries(d.by_kind).sort((a, b) => b[1] - a[1]);
+  const box = $('kinds');
+  if (!entries.length) return box.replaceChildren(el('div', { class: 'empty', text: 'No mistakes caught in this period.' }));
+  const max = Math.max(...entries.map(e => e[1]));
+  const grid = el('div', { class: 'hbars' });
+  entries.forEach(([k, n]) => {
+    const track = el('div', { class: 'track' }, [el('div', { class: 'fill', style: `width:${(n / max) * 100}%` })]);
+    track.addEventListener('pointermove', e => showTip(e, n, KIND_NAMES[k] || k));
+    track.addEventListener('pointerleave', hideTip);
+    grid.append(el('div', { class: 'name', text: KIND_NAMES[k] || k }), track, el('div', { class: 'num', text: n }));
+  });
+  box.replaceChildren(grid);
+}
+
+function renderPairs(d) {
+  const box = $('pairs');
+  if (!d.top_pairs.length) return box.replaceChildren(el('div', { class: 'empty', text: 'No look-alike mix-ups in this period.' }));
+  const rows = d.top_pairs.map(([said, rang, n]) => el('tr', {}, [
+    el('td', {}, [document.createTextNode(said), el('span', { class: 'arrow', text: '→' }), document.createTextNode(rang)]),
+    el('td', { class: 'n', text: n })]));
+  box.replaceChildren(el('table', {}, [el('tr', {}, [el('th', { text: 'Said → rang' }), el('th', { text: 'Times' })]), ...rows]));
+}
+
+function renderStandards(d) {
+  const entries = Object.entries(d.standards_rates);
+  const box = $('standards');
+  if (!entries.length) return box.replaceChildren(el('div', { class: 'empty', text: 'Standards tracking is off.' }));
+  const grid = el('div', { class: 'hbars' });
+  entries.forEach(([k, rate]) => {
+    const track = el('div', { class: 'track' }, [el('div', { class: 'fill', style: `width:${rate * 100}%` })]);
+    grid.append(el('div', { class: 'name', text: STANDARD_NAMES[k] || k }), track, el('div', { class: 'num', text: pct(rate) }));
+  });
+  box.replaceChildren(grid);
+}
+
+async function load() {
+  const res = await fetch(`/api/dashboard?hours=${hours}`);
+  const d = await res.json();
+  $('demoBadge').hidden = !d.demo_data;
+  const catchRate = d.orders ? d.orders_with_catch / d.orders : 0;
+  $('kpis').replaceChildren(
+    tile('Orders checked', d.orders.toLocaleString()),
+    tile('Orders with a mistake caught', pct(catchRate), `${d.orders_with_catch} orders`),
+    tile('Mistakes caught', d.caught_total.toLocaleString(), 'before reaching the kitchen'),
+    tile('Fixed before sending', d.orders_with_catch ? pct(d.fix_rate) : '—', 'of orders with a catch'),
+    tile('Check time (median)', d.p50_latency_ms ? d.p50_latency_ms + ' ms' : '—', 'Finalize → result'),
+  );
+  renderHourly(d); renderKinds(d); renderPairs(d); renderStandards(d);
+}
+
+document.querySelector('.filters').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  hours = +b.dataset.hours;
+  document.querySelectorAll('.filters button').forEach(x => x.classList.toggle('on', x === b));
+  load();
+});
+load().catch(e => $('kpis').replaceChildren(el('div', { class: 'empty', text: 'Could not load data: ' + e.message })));
+setInterval(() => load().catch(() => {}), 15000);
+</script>
+</body>
+</html>

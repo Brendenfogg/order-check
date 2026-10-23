@@ -4,6 +4,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Mutex;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::{Connection, params};
 
@@ -357,6 +358,30 @@ mod tests {
     }
 
     #[test]
+    fn seed_demo_marks_mode() {
+        let r = Records::open_in_memory().unwrap();
+        seed_demo(&r, &cfa(), 300).unwrap();
+        let d = r.dashboard(&cfa(), 0).unwrap();
+        assert_eq!(d.orders, 300);
+        assert!(d.demo_data);
+        assert!(
+            d.orders_with_catch > 0 && d.orders_with_catch < 150,
+            "{}",
+            d.orders_with_catch
+        );
+        assert!(!d.top_pairs.is_empty());
+        let modes: Vec<String> = r
+            .conn()
+            .prepare("SELECT DISTINCT mode FROM orders")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(modes, ["demo"]);
+    }
+
+    #[test]
     fn records_survive_reopen() {
         let path = std::env::temp_dir().join(format!("oc-records-{}.db", std::process::id()));
         let _ = std::fs::remove_file(&path);
@@ -378,6 +403,127 @@ mod tests {
 
 /// Fills the store with plausible synthetic records marked `mode = "demo"`,
 /// so the dashboard can be shown before any real orders exist.
-pub fn seed_demo(_records: &Records, _menu: &Menu, _n: u32) -> anyhow::Result<()> {
-    anyhow::bail!("seed_demo arrives in Task 11")
+pub fn seed_demo(records: &Records, menu: &Menu, n: u32) -> anyhow::Result<()> {
+    // Look-alike mix-ups seen at the counter: (said, rang).
+    const VARIANTS: &[(&str, &str)] = &[
+        ("spicy_sandwich", "chicken_sandwich"),
+        ("nuggets_12", "nuggets_8"),
+        ("deluxe_sandwich", "chicken_sandwich"),
+        ("unsweet_tea", "sweet_tea"),
+        ("diet_lemonade", "lemonade"),
+        ("spicy_deluxe", "deluxe_sandwich"),
+        ("grilled_nuggets_8", "nuggets_8"),
+    ];
+    const SAUCES: &[&str] = &[
+        "polynesian",
+        "cfa_sauce",
+        "honey_mustard",
+        "garden_herb_ranch",
+    ];
+    let variants: Vec<_> = VARIANTS
+        .iter()
+        .filter(|(a, b)| menu.item(a).is_some() && menu.item(b).is_some())
+        .collect();
+    let sauces: Vec<_> = SAUCES.iter().filter(|s| menu.item(s).is_some()).collect();
+
+    // Small deterministic generator so the demo looks the same every time.
+    let mut state: u64 = 0x5eed_0c0f_fee5;
+    let mut rand = move || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        (state % 10_000) as f32 / 10_000.0
+    };
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    // Seed in the restaurant's local hours, since the dashboard shows local time.
+    let offset: i64 = records.conn().query_row(
+        "SELECT CAST(strftime('%s', 'now', 'localtime') AS INTEGER) - CAST(strftime('%s', 'now') AS INTEGER)",
+        [],
+        |r| r.get(0),
+    )?;
+    let local_now = now + offset;
+    let day_start = local_now - local_now.rem_euclid(86_400) - offset;
+    // Hours weighted toward lunch and dinner rushes.
+    const HOURS: &[(i64, f32)] = &[
+        (7, 0.4),
+        (8, 0.6),
+        (9, 0.4),
+        (10, 0.5),
+        (11, 1.4),
+        (12, 2.0),
+        (13, 1.3),
+        (14, 0.6),
+        (15, 0.5),
+        (16, 0.7),
+        (17, 1.3),
+        (18, 1.6),
+        (19, 1.0),
+        (20, 0.5),
+    ];
+    let total_w: f32 = HOURS.iter().map(|h| h.1).sum();
+
+    for i in 0..n {
+        let day = (rand() * 7.0) as i64;
+        let mut pick = rand() * total_w;
+        let hour = HOURS
+            .iter()
+            .find(|h| {
+                pick -= h.1;
+                pick <= 0.0
+            })
+            .map_or(12, |h| h.0);
+        let ts = (day_start - day * 86_400 + hour * 3600 + (rand() * 3599.0) as i64).min(now - 60);
+
+        let caught_order = rand() < 0.18;
+        let (mut kinds, mut pairs) = (Vec::new(), Vec::new());
+        if caught_order {
+            let r = rand();
+            if r < 0.35 && !sauces.is_empty() {
+                let s = sauces[(rand() * sauces.len() as f32) as usize % sauces.len()];
+                kinds.push(MismatchKind::Count);
+                pairs.push((Some(s.to_string()), Some(s.to_string())));
+            } else if r < 0.70 && !variants.is_empty() {
+                let (a, b) = variants[(rand() * variants.len() as f32) as usize % variants.len()];
+                kinds.push(MismatchKind::Variant);
+                pairs.push((Some(a.to_string()), Some(b.to_string())));
+            } else if r < 0.85 {
+                kinds.push(MismatchKind::Size);
+                pairs.push((Some("lemonade".into()), Some("lemonade".into())));
+            } else if r < 0.96 {
+                kinds.push(MismatchKind::Modifier);
+                pairs.push((
+                    Some("chicken_sandwich".into()),
+                    Some("chicken_sandwich".into()),
+                ));
+            } else {
+                kinds.push(MismatchKind::Missing);
+                pairs.push((Some("cookie".into()), None));
+            }
+        }
+        let fixed = caught_order && rand() < 0.86;
+        records.insert(&OrderRecord {
+            order_num: 1001 + i,
+            mode: "demo".into(),
+            ts,
+            outcome: if caught_order && !fixed {
+                Outcome::Mismatch
+            } else {
+                Outcome::Match
+            },
+            caught: kinds.len() as u32,
+            kinds,
+            pairs,
+            fixed,
+            sent_as_rung: caught_order && !fixed,
+            standards: Some(BTreeMap::from([
+                ("my_pleasure".to_string(), rand() < 0.88),
+                ("offered_lto".to_string(), rand() < 0.61),
+            ])),
+            latency_ms: 280 + (rand() * 520.0) as u32,
+        })?;
+    }
+    Ok(())
 }
