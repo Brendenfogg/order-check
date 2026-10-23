@@ -1,0 +1,269 @@
+# A generic burger-and-chicken menu, to show that Order Check isn't tied to one
+# restaurant: swap this file in with --menu menus/generic-grill.toml.
+# Aliases are written already normalized (lowercase, numbers as digits).
+
+restaurant = "Generic Grill"
+lto_items = []
+
+[meal]
+default_side = "fries"
+default_size = "md"
+upcharge = 3.50
+
+[[families]]
+id = "burger"
+base = "hamburger"
+aliases = ["burger", "burgers"]
+
+[[families]]
+id = "chicken_sandwich"
+base = "chicken_sandwich"
+aliases = []
+
+[[families]]
+id = "tenders"
+base = "tenders_3"
+aliases = ["tenders", "chicken tenders", "strips"]
+
+[[families]]
+id = "tea"
+base = "iced_tea"
+aliases = ["tea"]
+
+[[families]]
+id = "cola"
+base = "cola"
+aliases = ["soda", "pop"]
+
+[[items]]
+id = "hamburger"
+name = "Hamburger"
+pos = "Hamburger"
+category = "entree"
+price = 5.49
+family = "burger"
+meal = true
+aliases = ["hamburger", "plain burger"]
+modifiers = ["no_onions", "no_pickles", "add_cheese"]
+
+[[items]]
+id = "cheeseburger"
+name = "Cheeseburger"
+pos = "Cheeseburger"
+category = "entree"
+price = 5.99
+family = "burger"
+meal = true
+aliases = ["cheeseburger", "cheese burger"]
+modifiers = ["no_onions", "no_pickles"]
+
+[[items]]
+id = "bacon_cheeseburger"
+name = "Bacon Cheeseburger"
+pos = "Bacon Chsbgr"
+category = "entree"
+price = 6.99
+family = "burger"
+meal = true
+aliases = ["bacon cheeseburger", "bacon cheese burger", "bacon burger"]
+modifiers = ["no_onions", "no_pickles"]
+
+[[items]]
+id = "chicken_sandwich"
+name = "Crispy Chicken Sandwich"
+pos = "Crsp Chkn"
+category = "entree"
+price = 6.29
+family = "chicken_sandwich"
+meal = true
+aliases = ["crispy chicken sandwich", "chicken sandwich", "crispy chicken"]
+modifiers = ["no_pickles"]
+
+[[items]]
+id = "spicy_chicken_sandwich"
+name = "Spicy Chicken Sandwich"
+pos = "Spcy Chkn"
+category = "entree"
+price = 6.49
+family = "chicken_sandwich"
+meal = true
+aliases = ["spicy chicken sandwich", "spicy chicken"]
+modifiers = ["no_pickles"]
+
+[[items]]
+id = "tenders_3"
+name = "3 pc Tenders"
+pos = "Tndr 3pc"
+category = "entree"
+price = 5.99
+family = "tenders"
+meal = true
+aliases = ["3 count tenders", "3 tenders", "3 count chicken tenders"]
+modifiers = []
+
+[[items]]
+id = "tenders_5"
+name = "5 pc Tenders"
+pos = "Tndr 5pc"
+category = "entree"
+price = 8.49
+family = "tenders"
+meal = true
+aliases = ["5 count tenders", "5 tenders", "5 count chicken tenders"]
+modifiers = []
+
+[[items]]
+id = "fries"
+name = "Fries"
+pos = "Fries"
+category = "side"
+price = 2.79
+sized = true
+family = "fries"
+aliases = ["fries", "fry", "french fries"]
+modifiers = []
+
+[[items]]
+id = "onion_rings"
+name = "Onion Rings"
+pos = "Onion Rng"
+category = "side"
+price = 3.29
+sized = true
+family = "onion_rings"
+aliases = ["onion rings", "rings"]
+modifiers = []
+
+[[items]]
+id = "side_salad"
+name = "Side Salad"
+pos = "Side Sld"
+category = "side"
+price = 3.99
+family = "side_salad"
+aliases = ["side salad", "salad"]
+modifiers = []
+
+[[items]]
+id = "iced_tea"
+name = "Iced Tea"
+pos = "Iced Tea"
+category = "drink"
+price = 2.29
+sized = true
+family = "tea"
+aliases = ["iced tea", "sweet tea"]
+modifiers = ["no_ice"]
+
+[[items]]
+id = "lemonade"
+name = "Lemonade"
+pos = "Lmnade"
+category = "drink"
+price = 2.79
+sized = true
+family = "lemonade"
+aliases = ["lemonade"]
+modifiers = ["no_ice"]
+
+[[items]]
+id = "cola"
+name = "Cola"
+pos = "Cola"
+category = "drink"
+price = 2.29
+sized = true
+family = "cola"
+aliases = ["cola", "coke"]
+modifiers = ["no_ice"]
+
+[[items]]
+id = "diet_cola"
+name = "Diet Cola"
+pos = "D Cola"
+category = "drink"
+price = 2.29
+sized = true
+family = "cola"
+aliases = ["diet cola", "diet coke"]
+modifiers = ["no_ice"]
+
+[[items]]
+id = "water"
+name = "Water"
+pos = "Water"
+category = "drink"
+price = 0.0
+family = "water"
+aliases = ["water", "cup of water"]
+modifiers = ["no_ice"]
+
+[[items]]
+id = "ranch"
+name = "Ranch"
+pos = "Ranch"
+category = "sauce"
+price = 0.0
+family = "ranch"
+aliases = ["ranch", "ranch sauce", "ranch dressing"]
+modifiers = []
+
+[[items]]
+id = "bbq"
+name = "BBQ"
+pos = "BBQ"
+category = "sauce"
+price = 0.0
+family = "bbq"
+aliases = ["bbq", "barbecue", "barbeque", "bbq sauce", "barbecue sauce"]
+modifiers = []
+
+[[items]]
+id = "honey_mustard"
+name = "Honey Mustard"
+pos = "Hny Mstrd"
+category = "sauce"
+price = 0.0
+family = "honey_mustard"
+aliases = ["honey mustard"]
+modifiers = []
+
+[[items]]
+id = "buffalo"
+name = "Buffalo"
+pos = "Buffalo"
+category = "sauce"
+price = 0.0
+family = "buffalo"
+aliases = ["buffalo", "buffalo sauce"]
+modifiers = []
+
+[[items]]
+id = "ketchup"
+name = "Ketchup"
+pos = "Ketchup"
+category = "sauce"
+price = 0.0
+family = "ketchup"
+aliases = ["ketchup"]
+modifiers = []
+
+[[modifiers]]
+id = "no_onions"
+name = "No Onions"
+aliases = ["no onions", "no onion", "hold the onions"]
+
+[[modifiers]]
+id = "no_pickles"
+name = "No Pickles"
+aliases = ["no pickles", "no pickle", "hold the pickles"]
+
+[[modifiers]]
+id = "add_cheese"
+name = "Add Cheese"
+aliases = ["add cheese", "with cheese"]
+
+[[modifiers]]
+id = "no_ice"
+name = "No Ice"
+aliases = ["no ice"]

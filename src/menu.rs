@@ -255,6 +255,13 @@ mod tests {
     }
 
     #[test]
+    fn generic_menu_loads() {
+        let m = Menu::load(Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/menus/generic-grill.toml"))).unwrap();
+        assert_eq!(m.item("bacon_cheeseburger").unwrap().family, "burger");
+        assert_eq!(m.family("burger").unwrap().base, "hamburger");
+    }
+
+    #[test]
     fn small_menu_is_valid() {
         assert!(Menu::from_toml_str(SMALL).is_ok());
     }
