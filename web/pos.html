@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Order Check POS</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { --maroon:#7a0f1d; --maroon-dk:#4a0710; --gap:6px; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#1b1b1b; color:#eee; font-family:-apple-system, "Helvetica Neue", Arial, sans-serif; padding:16px; }
+  .ipad { max-width:1180px; margin:0 auto; background:#000; border:10px solid #2c2c2c; border-radius:26px; overflow:hidden; }
+  .statusbar { display:flex; justify-content:space-between; font-size:12px; padding:4px 14px; color:#ddd; }
+  .pos { display:grid; grid-template-columns:118px 1fr 300px 104px; height:640px; }
+  .cats { background:#c8505c; padding:6px; display:flex; flex-direction:column; gap:6px; overflow:auto; }
+  .cat { background:var(--maroon-dk); color:#fff; border:none; border-radius:4px; padding:12px 6px; font-size:16px; font-weight:600; text-align:left; cursor:pointer; }
+  .cat.active { background:#000; outline:2px solid #fff; }
+  .grid-wrap { padding:10px; overflow:auto; }
+  .sizes { display:flex; gap:var(--gap); margin-bottom:var(--gap); }
+  .size { width:70px; height:44px; border-radius:4px; border:2px solid #555; background:#333; color:#fff; font-weight:800; font-size:18px; cursor:pointer; }
+  .size.on { background:#fff; color:#000; border-color:#fff; }
+  .toggle { height:44px; padding:0 14px; border-radius:4px; border:2px solid #555; background:#333; color:#fff; font-weight:700; cursor:pointer; }
+  .toggle.on { background:#e4002b; border-color:#e4002b; }
+  .spacer { flex:1; }
+  .grid { display:grid; grid-template-columns:repeat(5, 1fr); gap:var(--gap); }
+  .tile { aspect-ratio:1/1; border-radius:4px; border:none; cursor:pointer; padding:6px; font-weight:700; font-size:13px; line-height:1.15; color:#111; background:linear-gradient(#fff,#d6d6d6); }
+  .tile small { display:block; font-weight:500; color:#555; margin-top:4px; }
+  .empty { grid-column:1/-1; color:#888; padding:20px; }
+  .ticket { background:var(--maroon); padding:10px; display:flex; flex-direction:column; }
+  .tk-head { background:var(--maroon-dk); color:#fff; font-family:Menlo, monospace; font-size:13px; padding:4px 6px; display:flex; justify-content:space-between; }
+  .tk-body { background:#fff; color:#123; flex:1; overflow:auto; font-family:Menlo, monospace; font-size:13px; padding:6px; }
+  .start { text-align:center; margin-top:40px; font-family:-apple-system, Arial, sans-serif; color:#888; }
+  .start button { display:block; width:80%; margin:10px auto; padding:12px; font-size:15px; font-weight:700; border-radius:8px; border:2px solid var(--maroon); background:#fff; color:var(--maroon); cursor:pointer; }
+  .car { color:#1f3a93; margin-bottom:4px; }
+  .line { display:flex; justify-content:space-between; padding:2px 4px; cursor:pointer; color:#1f3a93; }
+  .line.sel { background:#ffe58a; }
+  .sub { padding:1px 4px 1px 22px; color:#c0392b; }
+  .notice { margin:6px 0 0; padding:6px 8px; border-radius:4px; background:#fff4c2; color:#6b4e00; font-family:-apple-system, Arial, sans-serif; font-size:12px; }
+  .notice button { margin-top:6px; border:none; border-radius:4px; padding:4px 10px; background:#6b4e00; color:#fff; cursor:pointer; }
+  .tk-total { background:#000; color:#fff; padding:6px 8px; font-family:Menlo, monospace; display:flex; justify-content:space-between; font-size:22px; font-weight:700; }
+  .qty { display:flex; justify-content:space-around; margin-top:8px; }
+  .qty button { width:44px; height:36px; font-size:18px; border:none; border-radius:4px; background:#eee; cursor:pointer; }
+  .funcs { background:var(--maroon-dk); padding:8px 6px; display:flex; flex-direction:column; gap:6px; }
+  .fn { flex:1; border:none; border-radius:4px; background:#9b4a55; color:#f3d6da; font-size:13px; font-weight:700; cursor:pointer; }
+  .fn:disabled { opacity:.4; cursor:default; }
+  .fn.finalize { background:#e4002b; color:#fff; font-size:15px; }
+  .bottombar { display:flex; justify-content:flex-end; gap:12px; padding:8px 14px; background:#f4f4f4; }
+  .bottombar span { padding:8px 24px; border-radius:20px; border:1px solid #ccc; color:#c4002b; font-weight:600; background:#fff; font-size:14px; }
+
+  .demo { max-width:1180px; margin:16px auto 0; display:grid; grid-template-columns:200px 1fr; gap:14px; }
+  .card { background:#262626; border:1px solid #3a3a3a; border-radius:12px; padding:14px; }
+  .card h3 { margin:0 0 8px; font-size:13px; color:#ffcf5a; text-transform:uppercase; letter-spacing:.05em; }
+  .clip { width:90px; height:118px; margin:6px auto 8px; border-radius:20px; border:3px solid #888; background:linear-gradient(#f4f4f4,#d8d8d8); position:relative; }
+  .clip .mic { position:absolute; top:12px; left:50%; transform:translateX(-50%); width:30px; height:30px; border-radius:50%; background:repeating-radial-gradient(#555 0 2px,#999 2px 4px); }
+  .clip .ring { position:absolute; bottom:16px; left:50%; transform:translateX(-50%); width:42px; height:42px; border-radius:50%; border:6px solid #bbb; }
+  .clip.listening .ring { border-color:#3b82f6; box-shadow:0 0 14px #3b82f6; }
+  .clip.checking .ring { border-color:#3b82f6; border-top-color:transparent; animation:spin .8s linear infinite; }
+  .clip.mismatch .ring { border-color:#e4002b; box-shadow:0 0 16px #e4002b; }
+  .clip.unconfirmed .ring { border-color:#f2c200; }
+  .clip.ok .ring, .clip.ready .ring { border-color:#16a34a; box-shadow:0 0 16px #16a34a; }
+  .clip.offline .ring { border-color:#555; border-style:dashed; }
+  .clip.buzz { animation:buzz .08s linear 6; }
+  @keyframes spin { to { transform:translateX(-50%) rotate(360deg); } }
+  @keyframes buzz { 0%{transform:translateX(-3px)} 50%{transform:translateX(3px)} 100%{transform:translateX(0)} }
+  .clipstate { text-align:center; font-weight:700; }
+  .feed { font-size:13px; line-height:1.5; max-height:180px; overflow:auto; color:#ddd; }
+  .muted { color:#888; font-style:italic; }
+
+  .modal-bg { position:fixed; inset:0; background:#000a; display:none; align-items:center; justify-content:center; z-index:10; }
+  .modal-bg.show { display:flex; }
+  .modal { background:#fff; color:#111; border-radius:12px; padding:18px; width:min(560px, 92vw); }
+  .modal h3 { margin:0 0 10px; }
+  .modal h4 { margin:12px 0 6px; font-size:13px; color:#555; }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px; }
+  .chip { padding:10px 14px; border-radius:8px; border:2px solid #ccc; background:#f6f6f6; cursor:pointer; font-weight:600; }
+  .chip.on { border-color:var(--maroon); background:#fbe7ea; }
+  .modal input { width:100%; padding:10px; font-size:16px; border-radius:8px; border:2px solid #ccc; }
+  .row { display:flex; gap:10px; justify-content:flex-end; margin-top:12px; }
+  .row button { padding:10px 18px; border-radius:8px; border:none; font-weight:700; cursor:pointer; }
+  .primary { background:var(--maroon); color:#fff; }
+  .ghost { background:#eee; }
+  .mm { background:#fdecee; border-left:4px solid #e4002b; padding:8px 10px; margin:6px 0; border-radius:4px; font-family:Menlo, monospace; font-size:14px; }
+  .toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#16a34a; color:#fff; padding:10px 18px; border-radius:20px; font-weight:700; display:none; }
+</style>
+</head>
+<body>
+
+<div class="ipad">
+  <div class="statusbar"><span id="clock"></span><span id="conn">connecting…</span></div>
+  <div class="pos">
+    <div class="cats" id="cats"></div>
+    <div class="grid-wrap">
+      <div class="sizes" id="sizes"></div>
+      <div class="grid" id="grid"></div>
+    </div>
+    <div class="ticket">
+      <div class="tk-head"><span id="tkName">Name</span><span id="tkMode">—</span><span id="tkNum">#</span></div>
+      <div class="tk-body" id="tkBody"></div>
+      <div class="tk-total"><span>Total</span><span id="tkTotal">$0.00</span></div>
+      <div class="qty"><button id="qtyUp">▲</button><button id="qtyDown">▼</button></div>
+    </div>
+    <div class="funcs">
+      <button class="fn" disabled>Store</button>
+      <button class="fn" disabled>Recall</button>
+      <button class="fn" disabled>Manager Functions</button>
+      <button class="fn" disabled>Promo Free</button>
+      <button class="fn" id="modBtn">Modifiers</button>
+      <button class="fn" id="cancelItemBtn">Cancel Item</button>
+      <button class="fn" id="cancelOrderBtn">Cancel Order</button>
+      <button class="fn finalize" id="finalizeBtn">Finalize</button>
+    </div>
+  </div>
+  <div class="bottombar"><span>Sequence</span><span>Pay</span><span>Scan</span></div>
+</div>
+
+<div class="demo">
+  <div class="card">
+    <h3>The clip</h3>
+    <div class="clip" id="clip"><div class="mic"></div><div class="ring"></div></div>
+    <div class="clipstate" id="clipState">Off</div>
+  </div>
+  <div class="card">
+    <h3>What the clip hears</h3>
+    <div class="feed" id="feed"><div class="muted">The live transcript appears here only when the server runs with --demo-transcript. Otherwise nothing from the conversation leaves the server.</div></div>
+  </div>
+</div>
+
+<div class="modal-bg" id="carModal"><div class="modal">
+  <h3>New drive-thru car</h3>
+  <div class="chips" id="carColors"></div>
+  <div class="chips" id="carTypes"></div>
+  <div class="row"><button class="ghost" data-close="carModal">Cancel</button><button class="primary" id="startCar">Start order</button></div>
+</div></div>
+
+<div class="modal-bg" id="nameModal"><div class="modal">
+  <h3>Guest name</h3>
+  <input id="guestInput" placeholder="e.g. Olivia">
+  <div class="row"><button class="ghost" data-close="nameModal">Cancel</button><button class="primary" id="startName">Start order</button></div>
+</div></div>
+
+<div class="modal-bg" id="modModal"><div class="modal">
+  <h3 id="modTitle">Modifiers</h3>
+  <div id="modBody"></div>
+  <div class="row"><button class="primary" data-close="modModal">Done</button></div>
+</div></div>
+
+<div class="modal-bg" id="alertModal"><div class="modal">
+  <h3 style="color:#c4002b">Order check: this doesn't match what the guest said</h3>
+  <div id="alertList"></div>
+  <p style="font-size:13px;color:#555">Fix the ticket and Finalize again, or send it as rung.</p>
+  <div class="row"><button class="ghost" id="sendAsRung">Send as rung</button><button class="primary" data-close="alertModal">Fix it</button></div>
+</div></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const CATS = [
+  ['entree', 'Entrées'], ['side', 'Sides'], ['drink', 'Beverage'], ['dessert', 'Desserts'], ['sauce', 'Condiments'],
+  ['breakfast', 'Breakfast'], ['premiums', 'Premiums'], ['catering', 'Catering'], ['local', 'Local'],
+];
+const SIZE_WORD = { sm: 'S', md: 'M', lg: 'L' };
+const CLIP_LABEL = { off: 'Off', listening: 'Listening', checking: 'Checking…', mismatch: 'Mismatch!', unconfirmed: "Couldn't confirm",
+  ok: 'Sent', ready: 'Food ready!', offline: 'Clip offline' };
+const COLORS = ['Black', 'White', 'Silver', 'Gray', 'Red', 'Blue', 'Navy', 'Green', 'Tan'];
+const TYPES = ['Sedan', 'SUV', 'Truck', 'Van', 'Coupe', 'Minivan'];
+
+let menu = null, byId = {}, modById = {};
+let cat = 'entree', size = 'md', mealMode = false;
+let order = null;           // { num, mode, label, lines: [ticket lines] }
+let sel = -1, pendingDrink = null, notice = null;
+let carColor = 'Navy', carType = 'SUV';
+
+const $ = id => document.getElementById(id);
+
+async function api(method, path, body) {
+  const res = await fetch(path, { method, headers: { 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : null;
+  if (!res.ok) throw new Error((data && data.error) || res.statusText);
+  return data;
+}
+
+// ---------- rendering ----------
+function renderCats() {
+  $('cats').innerHTML = CATS.map(([id, label]) => `<button class="cat ${id === cat ? 'active' : ''}" data-cat="${id}">${label}</button>`).join('');
+}
+function renderSizes() {
+  $('sizes').innerHTML = ['sm', 'md', 'lg'].map(s => `<button class="size ${s === size ? 'on' : ''}" data-size="${s}">${SIZE_WORD[s]}</button>`).join('')
+    + `<span class="spacer"></span><button class="toggle ${mealMode ? 'on' : ''}" id="mealToggle">MEAL ${mealMode ? 'ON' : 'OFF'}</button>`;
+}
+function renderGrid() {
+  const items = menu.items.filter(i => i.category === cat);
+  $('grid').innerHTML = items.length
+    ? items.map(i => `<button class="tile" data-item="${i.id}">${i.name}<small>${i.price ? '$' + i.price.toFixed(2) : ''}</small></button>`).join('')
+    : '<div class="empty">Not part of this demo.</div>';
+}
+function lineLabel(l) {
+  const it = byId[l.item];
+  const sz = l.size ? ' ' + l.size.toUpperCase() : '';
+  return (l.meal ? 'Meal-' : '') + it.pos + sz;
+}
+function linePrice(l) {
+  return (byId[l.item].price + (l.meal ? menu.meal.upcharge : 0)) * l.qty;
+}
+function renderTicket() {
+  const body = $('tkBody');
+  if (!order) {
+    $('tkName').textContent = 'Name'; $('tkMode').textContent = '—'; $('tkNum').textContent = '#';
+    $('tkTotal').textContent = '$0.00';
+    body.innerHTML = `<div class="start">Start an order<button id="newCar">Drive-thru car</button><button id="newName">Face2Face guest name</button></div>`;
+    return;
+  }
+  $('tkName').textContent = order.mode === 'drive_thru' ? 'Car' : order.label;
+  $('tkMode').textContent = order.mode === 'drive_thru' ? 'DRIVE THRU' : 'Face2Face';
+  $('tkNum').textContent = '# ' + order.num;
+  let html = order.mode === 'drive_thru' ? `<div class="car">${order.label}</div>` : '';
+  order.lines.forEach((l, i) => {
+    html += `<div class="line ${i === sel ? 'sel' : ''}" data-line="${i}"><span>${l.qty}&nbsp; ${lineLabel(l)}</span><span>${linePrice(l).toFixed(2)}</span></div>`;
+    l.modifiers.forEach(m => html += `<div class="sub">-${modById[m].name}</div>`);
+    if (l.meal) {
+      const side = l.meal.side, drink = l.meal.drink;
+      html += `<div class="sub">${l.qty} ${byId[side.item].pos} ${(side.size || '').toUpperCase()}</div>`;
+      if (drink) {
+        html += `<div class="sub">${l.qty} ${byId[drink.item].pos} ${(drink.size || '').toUpperCase()}</div>`;
+        drink.modifiers.forEach(m => html += `<div class="sub" style="padding-left:34px">-${modById[m].name}</div>`);
+      } else {
+        html += `<div class="sub" style="opacity:.6">(tap a drink)</div>`;
+      }
+    }
+  });
+  if (notice) html += notice;
+  body.innerHTML = html;
+  const total = order.lines.reduce((t, l) => t + linePrice(l), 0) * 1.0825;
+  $('tkTotal').textContent = '$' + total.toFixed(2);
+}
+function renderAll() { renderCats(); renderSizes(); renderGrid(); renderTicket(); }
+
+// ---------- ringing items ----------
+function addItem(id) {
+  if (!order) return flash();
+  const it = byId[id];
+  notice = null;
+  if (pendingDrink !== null && it.category === 'drink' && order.lines[pendingDrink]) {
+    order.lines[pendingDrink].meal.drink = { item: id, size: it.sized ? size : null, modifiers: [] };
+    pendingDrink = null;
+    return renderTicket();
+  }
+  if (mealMode && it.category === 'entree' && it.meal) {
+    order.lines.push({ item: id, qty: 1, size: null, modifiers: [],
+      meal: { side: { item: menu.meal.default_side, size, modifiers: [] }, drink: null } });
+    sel = pendingDrink = order.lines.length - 1;
+    cat = 'drink';
+    return renderAll();
+  }
+  const s = it.sized ? size : null;
+  const same = order.lines.find(l => l.item === id && l.size === s && !l.meal && l.modifiers.length === 0);
+  if (same && it.price === 0) same.qty++;
+  else order.lines.push({ item: id, qty: 1, size: s, modifiers: [], meal: null });
+  sel = order.lines.indexOf(same || order.lines[order.lines.length - 1]);
+  renderTicket();
+}
+function bumpQty(d) {
+  if (!order || sel < 0) return;
+  order.lines[sel].qty = Math.max(1, order.lines[sel].qty + d);
+  notice = null; renderTicket();
+}
+function cancelItem() {
+  if (!order || sel < 0) return;
+  if (pendingDrink === sel) pendingDrink = null;
+  order.lines.splice(sel, 1); sel = -1; notice = null; renderTicket();
+}
+function flash() {
+  const b = $('tkBody'); b.style.outline = '3px solid #ffcf5a';
+  setTimeout(() => b.style.outline = '', 600);
+}
+
+// ---------- modifiers ----------
+function openModifiers() {
+  if (!order || sel < 0) return flash();
+  const l = order.lines[sel];
+  const section = (title, target, key) => {
+    const allowed = byId[target.item].modifiers;
+    if (!allowed.length) return '';
+    return `<h4>${title}</h4><div class="chips">` + allowed.map(m =>
+      `<button class="chip ${target.modifiers.includes(m) ? 'on' : ''}" data-mod="${m}" data-target="${key}">${modById[m].name}</button>`).join('') + '</div>';
+  };
+  let html = section(byId[l.item].name, l, 'line');
+  if (l.meal && l.meal.drink) html += section(byId[l.meal.drink.item].name, l.meal.drink, 'drink');
+  $('modTitle').textContent = 'Modifiers';
+  $('modBody').innerHTML = html || '<p>No modifiers for this item.</p>';
+  $('modModal').classList.add('show');
+}
+function toggleModifier(m, targetKey) {
+  const l = order.lines[sel];
+  const target = targetKey === 'drink' ? l.meal.drink : l;
+  const i = target.modifiers.indexOf(m);
+  if (i >= 0) target.modifiers.splice(i, 1); else target.modifiers.push(m);
+  notice = null;
+  openModifiers(); renderTicket();
+}
+
+// ---------- order lifecycle ----------
+async function startOrder(mode, label) {
+  try {
+    const { order_num } = await api('POST', '/api/orders', { mode, label });
+    order = { num: order_num, mode, label, lines: [] };
+    sel = -1; pendingDrink = null; notice = null; mealMode = false; cat = 'entree';
+    $('feed').innerHTML = '';
+    renderAll();
+  } catch (e) { alert('Could not start order: ' + e.message); }
+}
+function ticket() {
+  return { lines: order.lines.map(l => ({ item: l.item, qty: l.qty, size: l.size, modifiers: l.modifiers,
+    meal: l.meal ? { side: l.meal.side, drink: l.meal.drink } : null })) };
+}
+async function finalize() {
+  if (!order || !order.lines.length) return flash();
+  $('finalizeBtn').disabled = true;
+  try {
+    const res = await api('POST', `/api/orders/${order.num}/finalize`, ticket());
+    const r = res.result;
+    if (r.outcome === 'mismatch') {
+      $('alertList').innerHTML = r.mismatches.map(m => `<div class="mm">${m.message}</div>`).join('');
+      $('alertModal').classList.add('show');
+    } else if (r.outcome === 'unconfirmed') {
+      const why = r.reason === 'clip offline' ? 'The clip was offline.' : r.reason === 'nothing heard' ? "The clip didn't hear the order." : 'Part of the order was unclear.';
+      const items = r.reason ? '' : r.unconfirmed.map(m => `<div>• ${m.message}</div>`).join('');
+      notice = `<div class="notice"><b>Couldn't confirm.</b> ${why}${items}<br><button id="sendAnyway">Send</button></div>`;
+      renderTicket();
+    } else {
+      await send(false);
+    }
+  } catch (e) {
+    alert('Check failed: ' + e.message);
+  } finally {
+    $('finalizeBtn').disabled = false;
+  }
+}
+async function send(asRung) {
+  $('alertModal').classList.remove('show');
+  try {
+    await api('POST', `/api/orders/${order.num}/send`, { as_rung: asRung });
+    toast(`Order #${order.num} sent to the kitchen`);
+    order = null; notice = null; sel = -1;
+    renderAll();
+  } catch (e) { alert('Send failed: ' + e.message); }
+}
+async function cancelOrder() {
+  if (!order) return;
+  await api('POST', `/api/orders/${order.num}/cancel`).catch(() => {});
+  order = null; notice = null; sel = -1;
+  setClip('off'); renderAll();
+}
+function toast(text) {
+  const t = $('toast'); t.textContent = text; t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 2500);
+}
+
+// ---------- clip ----------
+function setClip(state) {
+  $('clip').className = 'clip ' + state;
+  $('clipState').textContent = CLIP_LABEL[state] || state;
+  if (state === 'mismatch' || state === 'ready') {
+    const c = $('clip'); c.classList.remove('buzz'); void c.offsetWidth; c.classList.add('buzz');
+  }
+}
+function connect() {
+  const ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen = () => $('conn').textContent = 'server connected';
+  ws.onclose = () => { $('conn').textContent = 'server offline, retrying…'; setTimeout(connect, 1500); };
+  ws.onmessage = e => {
+    const ev = JSON.parse(e.data);
+    if (ev.type === 'clip') setClip(ev.state);
+    if (ev.type === 'ready') toast(`Order #${ev.order_num} is ready`);
+    if (ev.type === 'transcript' && order && ev.order_num === order.num) {
+      $('feed').innerHTML += `<div>${ev.text.replace(/</g, '&lt;')}</div>`;
+      $('feed').scrollTop = $('feed').scrollHeight;
+    }
+  };
+}
+
+// ---------- modals ----------
+function renderCarChips() {
+  $('carColors').innerHTML = COLORS.map(c => `<button class="chip ${c === carColor ? 'on' : ''}" data-color="${c}">${c}</button>`).join('');
+  $('carTypes').innerHTML = TYPES.map(t => `<button class="chip ${t === carType ? 'on' : ''}" data-type="${t}">${t}</button>`).join('');
+}
+
+// ---------- events ----------
+document.addEventListener('click', e => {
+  const t = e.target.closest('button, .line');
+  if (!t) return;
+  if (t.dataset.cat) { cat = t.dataset.cat; renderCats(); renderGrid(); }
+  else if (t.dataset.size) { size = t.dataset.size; renderSizes(); }
+  else if (t.id === 'mealToggle') { mealMode = !mealMode; renderSizes(); }
+  else if (t.dataset.item) addItem(t.dataset.item);
+  else if (t.dataset.line !== undefined) { sel = +t.dataset.line; renderTicket(); }
+  else if (t.dataset.mod) toggleModifier(t.dataset.mod, t.dataset.target);
+  else if (t.dataset.color) { carColor = t.dataset.color; renderCarChips(); }
+  else if (t.dataset.type) { carType = t.dataset.type; renderCarChips(); }
+  else if (t.dataset.close) $(t.dataset.close).classList.remove('show');
+  else if (t.id === 'newCar') { renderCarChips(); $('carModal').classList.add('show'); }
+  else if (t.id === 'newName') { $('guestInput').value = ''; $('nameModal').classList.add('show'); setTimeout(() => $('guestInput').focus(), 50); }
+  else if (t.id === 'startCar') { $('carModal').classList.remove('show'); startOrder('drive_thru', `${carColor} ${carType}`); }
+  else if (t.id === 'startName') { $('nameModal').classList.remove('show'); startOrder('face2face', $('guestInput').value.trim() || 'Guest'); }
+  else if (t.id === 'qtyUp') bumpQty(1);
+  else if (t.id === 'qtyDown') bumpQty(-1);
+  else if (t.id === 'modBtn') openModifiers();
+  else if (t.id === 'cancelItemBtn') cancelItem();
+  else if (t.id === 'cancelOrderBtn') cancelOrder();
+  else if (t.id === 'finalizeBtn') finalize();
+  else if (t.id === 'sendAsRung') send(true);
+  else if (t.id === 'sendAnyway') send(false);
+});
+$('guestInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('startName').click(); });
+
+const tick = () => $('clock').textContent = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+setInterval(tick, 10000); tick();
+
+api('GET', '/api/menu').then(m => {
+  menu = m;
+  m.items.forEach(i => byId[i.id] = i);
+  m.modifiers.forEach(x => modById[x.id] = x);
+  renderAll();
+  connect();
+}).catch(e => { document.body.innerHTML = `<p style="padding:20px">Could not load the menu from the server: ${e.message}</p>`; });
+</script>
+</body>
+</html>
