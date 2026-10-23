@@ -12,4 +12,3 @@ eval/report*
 /target
 __pycache__/
 eval/holdout/
-eval/transcripts-*.json
