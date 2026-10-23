@@ -24,6 +24,9 @@ use crate::ticket::Ticket;
 use crate::verify::{CheckResult, Outcome};
 
 pub const ABANDON_AFTER: Duration = Duration::from_secs(10 * 60);
+/// No order takes this long to say. If nobody has pressed Finalize by then
+/// (a closed POS tab, a crash), the mic turns itself off.
+pub const MAX_LISTEN: Duration = Duration::from_secs(5 * 60);
 pub const FIRST_ORDER: u32 = 1001;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -331,6 +334,16 @@ impl Sessions {
     /// Drops orders left open too long. Their transcripts go with them; no record is kept.
     pub fn expire(&self, now: Instant) -> Vec<u32> {
         let mut inner = lock(&self.inner);
+        let overlong = inner.listening.filter(|n| {
+            inner
+                .orders
+                .get(n)
+                .is_some_and(|o| now.saturating_duration_since(o.started) > MAX_LISTEN)
+        });
+        if let Some(n) = overlong {
+            self.stop_listening(&mut inner, n);
+            self.clip(n, ClipState::Off);
+        }
         let stale: Vec<u32> = inner
             .orders
             .iter()

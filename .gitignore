@@ -10,3 +10,6 @@ eval/report*
 # Added by cargo
 
 /target
+__pycache__/
+eval/holdout/
+eval/transcripts-*.json

@@ -128,6 +128,37 @@ fn abandoned_order_expires() {
     assert_eq!(s.records().dashboard(&menu(), 0).unwrap().orders, 0);
 }
 
+/// Records whether the mic is currently on.
+struct WatchedMic(Arc<std::sync::atomic::AtomicBool>);
+
+impl AudioSource for WatchedMic {
+    fn start(&mut self, _sink: Sender<Vec<f32>>) -> anyhow::Result<()> {
+        self.0.store(true, std::sync::atomic::Ordering::SeqCst);
+        Ok(())
+    }
+    fn stop(&mut self) {
+        self.0.store(false, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+#[test]
+fn listening_stops_on_its_own_long_before_the_transcript_expires() {
+    let on = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let s = sessions(&[], Box::new(WatchedMic(on.clone())));
+    let n = s.start("face2face", "Ann").unwrap();
+    assert!(on.load(std::sync::atomic::Ordering::SeqCst));
+    // A POS tab closed mid-order: nobody finalizes. The mic must not stay on.
+    assert!(
+        s.expire(Instant::now() + Duration::from_secs(6 * 60))
+            .is_empty()
+    );
+    assert!(
+        !on.load(std::sync::atomic::Ordering::SeqCst),
+        "mic still on after 6 minutes"
+    );
+    assert!(s.has_transcript(n), "the order itself is still open");
+}
+
 #[test]
 fn mic_offline_still_works() {
     let s = sessions(&[], Box::new(NoMic));

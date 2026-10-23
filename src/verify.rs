@@ -77,6 +77,8 @@ struct Unit {
     item: Option<String>,
     family: String,
     qty: Option<u32>,
+    /// The quantity was said out loud rather than implied by a bare item name.
+    qty_said: bool,
     size: Option<Size>,
     modifiers: Vec<String>,
     role: Role,
@@ -118,6 +120,7 @@ fn spoken_units(menu: &Menu, spoken: &SpokenOrder) -> Vec<Unit> {
             item: l.item.clone(),
             family: l.family.clone(),
             qty: l.qty,
+            qty_said: l.qty_said,
             size: l.size,
             modifiers: sorted(&l.modifiers),
             role,
@@ -128,7 +131,9 @@ fn spoken_units(menu: &Menu, spoken: &SpokenOrder) -> Vec<Unit> {
         if let Some(meal) = &l.meal {
             for (part, c) in [(MealPart::Side, &meal.side), (MealPart::Drink, &meal.drink)] {
                 if let Some(c) = c {
-                    out.push(spoken_component(c, l.qty, l.meal_size, part));
+                    let mut u = spoken_component(c, l.qty, l.meal_size, part);
+                    u.qty_said = l.qty_said;
+                    out.push(u);
                 }
             }
         }
@@ -146,6 +151,7 @@ fn spoken_component(
         item: c.item.clone(),
         family: c.family.clone(),
         qty,
+        qty_said: false,
         size: c.size.or(meal_size),
         modifiers: sorted(&c.modifiers),
         role: Role::Component,
@@ -166,6 +172,7 @@ fn ticket_units(menu: &Menu, ticket: &Ticket) -> Vec<Unit> {
             item: Some(l.item.clone()),
             family: family(&l.item),
             qty: Some(l.qty),
+            qty_said: true,
             size: l.size,
             modifiers: sorted(&l.modifiers),
             role: if entree {
@@ -189,6 +196,7 @@ fn ticket_units(menu: &Menu, ticket: &Ticket) -> Vec<Unit> {
                     item: Some(c.item.clone()),
                     family: family(&c.item),
                     qty: Some(l.qty),
+                    qty_said: true,
                     size: c.size,
                     modifiers: sorted(&c.modifiers),
                     role: Role::Component,
@@ -224,6 +232,7 @@ fn aggregate(units: Vec<Unit>) -> Vec<Unit> {
                 (Some(a), Some(b)) => Some(a + b),
                 _ => None,
             };
+            existing.qty_said &= u.qty_said;
             existing.confidence = existing.confidence.min(u.confidence);
             existing.default_side &= u.default_side;
             existing.part = existing.part.or(u.part);
@@ -406,18 +415,28 @@ pub fn verify(
     } else {
         absence_conf(transcript_confidence)
     };
-    for (ri, r) in rang.iter().enumerate() {
-        if rang_used[ri] || r.default_side {
-            continue;
-        }
-        let excused = match r.part {
-            Some(MealPart::Drink) => unspecified_drinks,
-            Some(MealPart::Side) => unspecified_sides,
-            None => false,
-        };
-        if excused {
-            continue;
-        }
+    let excused = |r: &Unit| {
+        r.default_side
+            || match r.part {
+                Some(MealPart::Drink) => unspecified_drinks,
+                Some(MealPart::Side) => unspecified_sides,
+                None => false,
+            }
+    };
+    let considered = rang.iter().filter(|r| !excused(r)).count();
+    let extras: Vec<usize> = (0..rang.len())
+        .filter(|&ri| !rang_used[ri] && !excused(&rang[ri]))
+        .collect();
+    // Hearing only part of the order (a clipped read-back, a passing truck)
+    // is not evidence that the rest was never said.
+    let heard_only_part = !nothing_heard && extras.len() >= 2 && extras.len() * 2 > considered;
+    let extra_confidence = if heard_only_part {
+        0.0
+    } else {
+        extra_confidence
+    };
+    for &ri in &extras {
+        let r = &rang[ri];
         let message = format!(
             "Rang {} {}, guest didn't ask",
             r.qty.unwrap_or(1),
@@ -449,6 +468,8 @@ pub fn verify(
     }
     if nothing_heard && !ticket.lines.is_empty() {
         result.reason = Some("nothing heard".into());
+    } else if heard_only_part {
+        result.reason = Some("heard only part of the order".into());
     }
     result.outcome = if !result.mismatches.is_empty() {
         Outcome::Mismatch
@@ -513,10 +534,11 @@ fn compare_pair(
     if let (Some(a), Some(b)) = (s.qty, r.qty)
         && a != b
     {
+        // "polynesian sauce" with no number implies one, but only weakly.
         push(
             MismatchKind::Count,
             format!("Said {a} {}, rang {b}", namer.base(s)),
-            heard,
+            if s.qty_said { heard } else { unheard },
         );
     }
     let sized = s
@@ -750,6 +772,30 @@ mod tests {
         );
         assert_eq!(
             check_at(&["a large lemonade"], 0.95, ticket).outcome,
+            Outcome::Mismatch
+        );
+    }
+
+    #[test]
+    fn partial_readback_is_unconfirmed() {
+        let r = check(
+            &["a large lemonade, got it"],
+            serde_json::json!({"lines": [{"item": "lemonade", "qty": 1, "size": "lg"}, {"item": "cookie", "qty": 1},
+                {"item": "spicy_sandwich", "qty": 1}, {"item": "polynesian", "qty": 2}]}),
+        );
+        assert_eq!(r.outcome, Outcome::Unconfirmed, "{r:#?}");
+        assert_eq!(r.reason.as_deref(), Some("heard only part of the order"));
+    }
+
+    #[test]
+    fn implied_count_needs_a_clear_transcript() {
+        let ticket = serde_json::json!({"lines": [{"item": "polynesian", "qty": 2}]});
+        assert_eq!(
+            check_at(&["polynesian sauce please"], 0.7, ticket.clone()).outcome,
+            Outcome::Unconfirmed
+        );
+        assert_eq!(
+            check_at(&["polynesian sauce please"], 0.95, ticket).outcome,
             Outcome::Mismatch
         );
     }

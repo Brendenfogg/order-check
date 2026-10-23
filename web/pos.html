@@ -167,7 +167,8 @@ const TYPES = ['Sedan', 'SUV', 'Truck', 'Van', 'Coupe', 'Minivan'];
 let menu = null, byId = {}, modById = {};
 let cat = 'entree', size = 'md', mealMode = false;
 let order = null;           // { num, mode, label, lines: [ticket lines] }
-let sel = -1, pendingDrink = null, notice = null;
+let sel = -1, pendingDrink = null, notice = null, lastSent = null;
+const clipStates = {};   // latest clip state per order; "listening" can arrive before the order number does
 let carColor = 'Navy', carType = 'SUV';
 
 const $ = id => document.getElementById(id);
@@ -304,6 +305,7 @@ async function startOrder(mode, label) {
   try {
     const { order_num } = await api('POST', '/api/orders', { mode, label });
     order = { num: order_num, mode, label, lines: [] };
+    if (clipStates[order_num]) setClip(clipStates[order_num]);
     sel = -1; pendingDrink = null; notice = null; mealMode = false; cat = 'entree';
     $('feed').innerHTML = '';
     renderAll();
@@ -340,6 +342,7 @@ async function send(asRung) {
   $('alertModal').classList.remove('show');
   try {
     await api('POST', `/api/orders/${order.num}/send`, { as_rung: asRung });
+    lastSent = order.num;
     toast(`Order #${order.num} sent to the kitchen`);
     order = null; notice = null; sel = -1;
     renderAll();
@@ -368,9 +371,17 @@ function connect() {
   const ws = new WebSocket(`ws://${location.host}/ws`);
   ws.onopen = () => $('conn').textContent = 'server connected';
   ws.onclose = () => { $('conn').textContent = 'server offline, retrying…'; setTimeout(connect, 1500); };
-  ws.onmessage = e => {
-    const ev = JSON.parse(e.data);
-    if (ev.type === 'clip') setClip(ev.state);
+  ws.onmessage = e => handleEvent(JSON.parse(e.data));
+}
+function handleEvent(ev) {
+  {
+    // The clip shows only the order in front of the employee (or the one just sent);
+    // an older order's "food ready" arrives as a toast instead.
+    const current = order ? order.num : lastSent;
+    if (ev.type === 'clip') {
+      clipStates[ev.order_num] = ev.state;
+      if (ev.order_num === current) setClip(ev.state);
+    }
     if (ev.type === 'ready') toast(`Order #${ev.order_num} is ready`);
     if (ev.type === 'transcript' && order && ev.order_num === order.num) {
       $('feed').innerHTML += `<div>${ev.text.replace(/</g, '&lt;')}</div>`;

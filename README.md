@@ -41,20 +41,33 @@ It targets the small, constant mistakes I saw working at Chick-fil-A: the button
 
 ## Results
 
-Measured on a synthetic test set: 32 scripted Chick-fil-A orders spoken by 16 different macOS voices, each in two situations (face-to-face, where both voices are heard, and headset, where only the employee's read-back is heard), at three noise levels (clean, 15 dB, and 5 dB SNR, with pink noise plus background chatter). Every order is checked against its correct ticket and against one ticket per planted mistake type: **177 orders, 1,107 checks.**
+Measured on synthetic test sets of scripted Chick-fil-A orders spoken by 16 macOS voices. Each order comes in two situations (face-to-face, where both voices are heard, and headset, where only the employee's read-back is heard) at three noise levels (clean, 15 dB, and 5 dB SNR, with pink noise plus background chatter). Every order is checked against its correct ticket (any alarm is a false alarm) and against one ticket per kind of planted mistake.
+
+### Tuning set (177 orders, 1,107 checks)
+
+The matching rules and thresholds were tuned on this set, so these numbers are optimistic.
 
 | Model | Caught (all) | False alarms (all) | Caught / false alarms, **clean** | Caught / false alarms, 15 dB | Caught / false alarms, 5 dB | Finalize → result (p95) |
 |---|---|---|---|---|---|---|
-| Whisper base.en (142 MB) | 71.2% | 24.3% | 88.1% / 6.8% | 75.5% / 22.0% | 50.0% / 44.1% | 276 ms |
-| **Whisper small.en (466 MB), default** | 81.7% | 20.9% | 96.1% / 3.4% | 86.8% / 16.9% | 62.3% / 42.4% | 512 ms |
-| Whisper large-v3-turbo q5 (574 MB) | 83.3% | 14.7% | 97.4% / 3.4% | 88.7% / 11.9% | 63.9% / 28.8% | 2225 ms |
+| Whisper base.en (142 MB) | 68.1% | 20.3% | 86.1% / 5.1% | 73.5% / 18.6% | 44.5% / 37.3% | 276 ms |
+| **Whisper small.en (466 MB), default** | 79.4% | 18.6% | 96.1% / 3.4% | 84.8% / 13.6% | 57.1% / 39.0% | 512 ms |
+| Whisper large-v3-turbo q5 (574 MB) | 81.5% | 11.3% | 97.1% / 1.7% | 87.4% / 10.2% | 60.0% / 22.0% | 2225 ms |
 
-Targets from the design: catch ≥ 90%, false alarms ≤ 5%, result ≤ 1 s. **On clean audio, small.en meets all three.** Across all noise levels, none of the models does yet.
+### Held-out set (69 orders, 405 checks): the honest number
+
+These are 12 new orders written after tuning and never used to change the logic: declined meal and size upsells, "actually, can I also…", a free-item reward, two sizes of one drink, swaps, and big family orders.
+
+| Model | Caught (all) | False alarms (all) | Caught / false alarms, **clean** | Caught / false alarms, 15 dB | Caught / false alarms, 5 dB | Finalize → result (p95) |
+|---|---|---|---|---|---|---|
+| **Whisper small.en, held-out set** | 70.2% | 30.4% | 81.2% / 34.8% | 75.9% / 43.5% | 53.6% / 13.0% | 617 ms |
+
+**The gap is the finding.** On clean audio the check still catches most planted mistakes (81%), but it raises false alarms on about a third of correct tickets. Part of that is overfitting: phrasings the rules were never taught, like "one large and one small lemonade," "two chocolate shakes, one with no whipped cream," and "a 3-count strip" in the singular. Part is Whisper mishearing ("Chicken Sandwich, Grill with…" for "meal with"). A rule-based extractor can be patched phrase by phrase, but the held-out set shows that approach won't generalize on its own. That's the case for the next step: real recorded orders and a learned (small, local) language model for order extraction.
 
 The full breakdown, including every miss and false alarm with what Whisper heard, is in [docs/results.md](docs/results.md).
 
 **What the numbers say, honestly:**
-- On clear audio, the check catches nearly every planted mistake with very few false alarms, and returns a result in about half a second.
+- On the orders it was tuned on, with clear audio, it catches nearly every planted mistake with very few false alarms, and returns a result in about half a second.
+- On new orders it never saw, false alarms jump to about a third of correct tickets. The rules are overfit to the phrasings they were tuned on. This is the most important result here, and it points to the next step.
 - Noise is the limit. At 15 dB and especially 5 dB (background as loud as the speaker), Whisper mishears menu words often enough that false alarms climb. A clip worn a few inches from the employee's mouth should hear much closer to the "clean" case than a far-field mic, but that's a claim to test with real recordings, not one these numbers prove.
 - Headset mode is harder: when the clip only hears the employee's read-back, there's half as much speech to go on.
 
@@ -94,7 +107,8 @@ Start an order (pick a car or type a name) and the mic starts listening. Speak t
 **Run the evaluation:**
 
 ```bash
-python3 tools/gen_testset.py --out eval/cases --seed 7     # ~3 min, uses `say` + ffmpeg
+python3 tools/gen_testset.py --out eval/cases --seed 7                    # tuning set, ~3 min
+python3 tools/gen_testset.py --set holdout --out eval/holdout --seed 11  # held-out set
 ./target/release/order-check eval --model models/ggml-small.en.bin \
     --out eval/report-small.en --transcripts eval/transcripts-small.en.json
 ```

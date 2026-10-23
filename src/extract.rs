@@ -35,6 +35,9 @@ pub struct SpokenLine {
     /// The quantity was actually said (a number or "a"), not just implied.
     #[serde(skip)]
     pub qty_said: bool,
+    /// Which sentence first named this line; two mentions in one sentence are two items.
+    #[serde(skip)]
+    pub sentence: usize,
     pub size: Option<Size>,
     pub modifiers: Vec<String>,
     pub meal: Option<SpokenMeal>,
@@ -63,6 +66,7 @@ pub fn extract(menu: &Menu, matcher: &Matcher, utts: &[Utterance]) -> SpokenOrde
         menu,
         order: SpokenOrder::default(),
         pending_offer: Vec::new(),
+        sentence_no: 0,
         open_meal: None,
         meal_age: 0,
         target: None,
@@ -75,6 +79,52 @@ pub fn extract(menu: &Menu, matcher: &Matcher, utts: &[Utterance]) -> SpokenOrde
         }
     }
     ex.order
+}
+
+/// Words that make "actually, can I also get…" an addition, not a correction.
+const ADD_WORDS: &[&str] = &["also", "add", "too", "plus"];
+/// A reply that starts with one of these turns an offer down, whatever follows.
+const LEADING_NO: &[&str] = &["no", "nah", "nope"];
+
+/// Something an employee offered, held until the guest answers.
+#[derive(Debug, Clone)]
+enum Offered {
+    Item(Phrase),
+    Meal,
+    Size(Size),
+    Qty(u32),
+}
+
+/// "Sure." accepts. "No thanks", "Yeah, no, I'm good" and "No, I'll take a
+/// lemonade" don't, and neither does "I'll take <something not offered>".
+fn accepts_offer(tokens: &[String], units: &[Unit], pending: &[Offered]) -> bool {
+    if tokens
+        .first()
+        .is_some_and(|t| LEADING_NO.contains(&t.as_str()))
+    {
+        return false;
+    }
+    if units
+        .iter()
+        .any(|u| matches!(u, Unit::Other(MentionKind::Cue(Cue::Decline))))
+    {
+        return false;
+    }
+    if !matches!(
+        units.first(),
+        Some(Unit::Other(MentionKind::Cue(Cue::Accept)))
+    ) {
+        return false;
+    }
+    match units.get(1) {
+        Some(Unit::Phrase(p)) => pending.iter().any(|o| match (o, &p.kind) {
+            (Offered::Item(op), PhraseKind::Item(id)) => {
+                matches!(&op.kind, PhraseKind::Item(oid) if oid == id)
+            }
+            _ => false,
+        }),
+        _ => true,
+    }
 }
 
 /// What a correction or modifier applies to: the last thing mentioned.
@@ -184,8 +234,11 @@ fn group(menu: &Menu, tokens: &[String], ms: &[Mention]) -> Vec<Unit> {
                 _ => {}
             }
         }
-        // A singular item named with no number means one ("spicy deluxe meal").
-        if p.qty.is_none() && !ms[j].plural && matches!(p.kind, PhraseKind::Item(_)) {
+        // A singular item named with no number means one ("spicy deluxe meal"),
+        // but "some polynesian sauce" leaves the amount open.
+        let after_some = ms[first].start > 0 && tokens[ms[first].start - 1] == "some";
+        if p.qty.is_none() && !ms[j].plural && !after_some && matches!(p.kind, PhraseKind::Item(_))
+        {
             p.qty = Some(1);
         }
         let start_tok = ms[first].start;
@@ -265,7 +318,8 @@ fn is_entree(menu: &Menu, p: &Phrase) -> bool {
 struct Extractor<'a> {
     menu: &'a Menu,
     order: SpokenOrder,
-    pending_offer: Vec<Phrase>,
+    pending_offer: Vec<Offered>,
+    sentence_no: usize,
     open_meal: Option<usize>,
     meal_age: u8,
     target: Option<Target>,
@@ -273,6 +327,7 @@ struct Extractor<'a> {
 
 impl<'a> Extractor<'a> {
     fn sentence(&mut self, tokens: &[String], ms: &[Mention], conf: f32) {
+        self.sentence_no += 1;
         // A meal's drink can come in the same sentence or the next one.
         if self.open_meal.is_some() {
             self.meal_age += 1;
@@ -281,16 +336,23 @@ impl<'a> Extractor<'a> {
             }
         }
         let units = group(self.menu, tokens, ms);
+
+        // An offer ("would you like to make that a meal?") only changes the
+        // order if the very next reply accepts it.
         let pending = std::mem::take(&mut self.pending_offer);
-        if matches!(
-            units.first(),
-            Some(Unit::Other(MentionKind::Cue(Cue::Accept)))
-        ) {
-            for p in pending {
-                self.add(p, conf, false);
+        if !pending.is_empty() && accepts_offer(tokens, &units, &pending) {
+            for edit in pending {
+                match edit {
+                    Offered::Item(p) => self.add(p, conf, false),
+                    Offered::Meal => self.make_meal(),
+                    Offered::Size(s) => self.correct_size(s),
+                    Offered::Qty(q) => self.set_qty(q),
+                }
             }
         }
 
+        // "Actually, can I also get…" adds; it doesn't correct.
+        let adds = tokens.iter().any(|t| ADD_WORDS.contains(&t.as_str()));
         let (mut offer, mut correcting, mut removing, mut additive, mut negate, mut every) =
             (false, false, false, false, false, false);
         let mut touched: Vec<Target> = Vec::new();
@@ -298,7 +360,7 @@ impl<'a> Extractor<'a> {
             match unit {
                 Unit::Other(MentionKind::Cue(cue)) => match cue {
                     Cue::Offer => offer = true,
-                    Cue::Correction => correcting = true,
+                    Cue::Correction => correcting = !adds,
                     Cue::Removal => removing = true,
                     Cue::Additive => additive = true,
                     Cue::Negation => negate = true,
@@ -306,6 +368,13 @@ impl<'a> Extractor<'a> {
                     Cue::Accept | Cue::Decline => {}
                 },
                 Unit::Other(MentionKind::Modifier(id)) => self.attach_modifier(&id),
+                Unit::Other(MentionKind::Meal) if offer => self.pending_offer.push(Offered::Meal),
+                Unit::Other(MentionKind::Size(s)) if offer => {
+                    self.pending_offer.push(Offered::Size(s))
+                }
+                Unit::Other(MentionKind::Quantity(q)) if offer => {
+                    self.pending_offer.push(Offered::Qty(q))
+                }
                 Unit::Other(MentionKind::Meal) if correcting => self.make_meal(),
                 Unit::Other(MentionKind::Size(s)) if correcting => self.correct_size(s),
                 Unit::Other(MentionKind::Size(s)) if every => {
@@ -314,11 +383,7 @@ impl<'a> Extractor<'a> {
                     }
                     every = false;
                 }
-                Unit::Other(MentionKind::Quantity(q)) if correcting => {
-                    if let Some(i) = self.target_line() {
-                        self.order.lines[i].qty = Some(q);
-                    }
-                }
+                Unit::Other(MentionKind::Quantity(q)) if correcting => self.set_qty(q),
                 Unit::Other(_) => {}
                 Unit::Phrase(mut p) => {
                     if negate {
@@ -338,10 +403,16 @@ impl<'a> Extractor<'a> {
                         if let PhraseKind::Item(id) = &p.kind {
                             self.order.offered.push(id.clone());
                         }
-                        self.pending_offer.push(p);
+                        self.pending_offer.push(Offered::Item(p));
                     } else if removing {
-                        self.remove(&p);
                         removing = false;
+                        // "Never mind, just a lemonade": nothing to remove by
+                        // that name, so drop the last item and take this one.
+                        if !self.remove(&p) {
+                            self.remove_last();
+                            self.add(p, conf, false);
+                            touched.extend(self.target);
+                        }
                     } else if correcting && self.correct_with(&p, conf) {
                         correcting = false;
                     } else {
@@ -358,6 +429,13 @@ impl<'a> Extractor<'a> {
                     }
                 }
             }
+        }
+    }
+
+    fn set_qty(&mut self, q: u32) {
+        if let Some(i) = self.target_line() {
+            self.order.lines[i].qty = Some(q);
+            self.order.lines[i].qty_said = true;
         }
     }
 
@@ -432,6 +510,7 @@ impl<'a> Extractor<'a> {
             family: self.family_of(&p),
             qty: p.qty,
             qty_said: p.qty_said,
+            sentence: self.sentence_no,
             size: p.size,
             modifiers: Vec::new(),
             meal: p.meal.then_some(SpokenMeal {
@@ -546,6 +625,10 @@ impl<'a> Extractor<'a> {
             let same_item = l.item.is_some() && l.item == Self::item_of(p);
             let conflict = matches!((l.qty, p.qty), (Some(a), Some(b)) if a != b)
                 || matches!((l.size, p.size), (Some(a), Some(b)) if a != b);
+            // A conflicting repeat is a read-back only if it came in a later sentence.
+            if conflict && l.sentence == self.sentence_no {
+                return false;
+            }
             same_item || !conflict
         })
     }
@@ -747,13 +830,21 @@ impl<'a> Extractor<'a> {
         self.meal_age = 0;
     }
 
-    fn remove(&mut self, p: &Phrase) {
+    /// Removes the most recent line with this item. Returns false if there was none.
+    fn remove(&mut self, p: &Phrase) -> bool {
         let pos = (0..self.order.lines.len()).rev().find(|&i| {
             let l = &self.order.lines[i];
             self.compatible(&l.item, &l.family, p)
         });
-        if let Some(i) = pos {
-            self.order.lines.remove(i);
+        let Some(i) = pos else { return false };
+        self.order.lines.remove(i);
+        self.target = None;
+        self.open_meal = None;
+        true
+    }
+
+    fn remove_last(&mut self) {
+        if self.order.lines.pop().is_some() {
             self.target = None;
             self.open_meal = None;
         }
@@ -1075,6 +1166,112 @@ mod tests {
     fn grill_nuggets() {
         let o = ex(&["12-count grill nuggets and a large diet coke"]);
         assert_eq!(ids(&o), [Some("grilled_nuggets_12"), Some("diet_cola")]);
+    }
+
+    // ---- review findings: declined upsells must change nothing
+    #[test]
+    fn declined_meal_upsell_changes_nothing() {
+        let o = ex(&[
+            "A spicy chicken sandwich",
+            "Would you like to make that a meal?",
+            "No thanks.",
+        ]);
+        assert_eq!(ids(&o), [Some("spicy_sandwich")]);
+        assert!(o.lines[0].meal.is_none(), "{o:#?}");
+    }
+
+    #[test]
+    fn declined_combo_upsell_changes_nothing() {
+        let o = ex(&[
+            "A spicy chicken sandwich",
+            "Do you want to make it a combo?",
+            "No, just the sandwich.",
+        ]);
+        assert!(o.lines[0].meal.is_none(), "{o:#?}");
+    }
+
+    #[test]
+    fn declined_size_upsell_changes_nothing() {
+        let o = ex(&[
+            "A medium lemonade",
+            "Would you like to make that a large?",
+            "No thanks.",
+        ]);
+        assert_eq!(o.lines[0].size, Some(Size::Md), "{o:#?}");
+    }
+
+    #[test]
+    fn accepted_meal_upsell_applies() {
+        let o = ex(&[
+            "A spicy chicken sandwich",
+            "Would you like to make that a meal?",
+            "Sure.",
+        ]);
+        assert!(o.lines[0].meal.is_some(), "{o:#?}");
+    }
+
+    #[test]
+    fn no_then_ordering_something_else_declines_offer() {
+        let o = ex(&[
+            "Would you like to try our peach milkshake?",
+            "No, I'll take a large lemonade",
+        ]);
+        assert_eq!(ids(&o), [Some("lemonade")], "{o:#?}");
+    }
+
+    #[test]
+    fn yeah_no_im_good_declines_offer() {
+        let o = ex(&[
+            "Would you like to try our peach milkshake?",
+            "Yeah, no, I'm good",
+        ]);
+        assert!(o.lines.is_empty(), "{o:#?}");
+    }
+
+    // ---- review findings: "actually" and "never mind" reach
+    #[test]
+    fn actually_also_adds() {
+        let o = ex(&[
+            "A large sweet tea",
+            "Actually, can I also get a medium lemonade?",
+        ]);
+        assert_eq!(ids(&o), [Some("sweet_tea"), Some("lemonade")], "{o:#?}");
+    }
+
+    #[test]
+    fn actually_add_too_adds() {
+        let o = ex(&[
+            "A chicken sandwich",
+            "Actually, can I add a spicy chicken sandwich too?",
+        ]);
+        assert_eq!(
+            ids(&o),
+            [Some("chicken_sandwich"), Some("spicy_sandwich")],
+            "{o:#?}"
+        );
+    }
+
+    #[test]
+    fn never_mind_then_new_item_replaces() {
+        let o = ex(&["A cookie.", "Never mind, just a lemonade."]);
+        assert_eq!(ids(&o), [Some("lemonade")], "{o:#?}");
+    }
+
+    #[test]
+    fn two_sizes_in_one_sentence_are_two_items() {
+        let o = ex(&["a large lemonade and a small lemonade"]);
+        assert_eq!(o.lines.len(), 2, "{o:#?}");
+    }
+
+    #[test]
+    fn some_singular_is_unspecified() {
+        let o = ex(&["a spicy chicken sandwich with some polynesian sauce"]);
+        let poly = o
+            .lines
+            .iter()
+            .find(|l| l.item.as_deref() == Some("polynesian"))
+            .unwrap();
+        assert_eq!(poly.qty, None);
     }
 
     #[test]

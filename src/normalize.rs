@@ -84,7 +84,11 @@ pub fn normalize(text: &str) -> Vec<String> {
             };
             continue;
         }
-        if w == "free" {
+        // "a free cookie" is a reward, not three cookies.
+        let after_determiner = out
+            .last()
+            .is_some_and(|p| ["a", "my", "your", "the", "for"].contains(&p.as_str()));
+        if w == "free" && !after_determiner {
             // Whisper hears "three" as "free" more often than anyone orders anything free.
             out.push("3".into());
         } else if let Some(n) = NUMBER_WORDS.iter().position(|nw| *nw == w) {
@@ -204,6 +208,15 @@ mod tests {
             n("an 8-pound grilled nuggets"),
             ["an", "8", "count", "grilled", "nuggets"]
         );
+    }
+
+    #[test]
+    fn a_free_reward_is_not_three() {
+        assert_eq!(
+            n("I have a reward for a free cookie"),
+            ["i", "have", "a", "reward", "for", "a", "free", "cookie"]
+        );
+        assert_eq!(n("and free polynesian"), ["and", "3", "polynesian"]);
     }
 
     #[test]

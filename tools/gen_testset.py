@@ -13,6 +13,7 @@ quiet background chatter). Each case.json holds the correct ticket and one
 ticket per kind of planted mistake that applies.
 
 Usage: python3 tools/gen_testset.py --out eval/cases --seed 7
+       python3 tools/gen_testset.py --set holdout --out eval/holdout --seed 11
 Requires macOS `say` and ffmpeg. Python stdlib only.
 """
 
@@ -32,7 +33,10 @@ import wave
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from conversations import CONVERSATIONS  # noqa: E402
+import conversations  # noqa: E402
+import holdout  # noqa: E402
+
+SETS = {"tuning": conversations.CONVERSATIONS, "holdout": holdout.CONVERSATIONS}
 
 ROOT = Path(__file__).resolve().parent.parent
 SR = 16000
@@ -238,6 +242,8 @@ def main():
     ap.add_argument("--out", default=str(ROOT / "eval" / "cases"))
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--only", help="generate a single conversation id")
+    ap.add_argument("--set", choices=sorted(SETS), default="tuning",
+                    help="tuning = the set the logic was tuned on; holdout = never used for tuning")
     args = ap.parse_args()
 
     rng = random.Random(args.seed)
@@ -253,7 +259,7 @@ def main():
         shutil.rmtree(out)
     out.mkdir(parents=True, exist_ok=True)
 
-    convs = [c for c in CONVERSATIONS if not args.only or c["id"] == args.only]
+    convs = [c for c in SETS[args.set] if not args.only or c["id"] == args.only]
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         noise = build_noise(tmp, customers + employees, rng)
