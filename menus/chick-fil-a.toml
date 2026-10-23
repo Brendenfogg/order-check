@@ -1,0 +1,579 @@
+# Chick-fil-A menu for Order Check.
+# Everything the system knows about this restaurant lives in this file.
+# Aliases are written already normalized: lowercase, no punctuation,
+# "chick fil a" as three words, numbers as digits, "N count" for nugget/strip counts.
+
+restaurant = "Chick-fil-A"
+lto_items = ["peach_shake"]
+
+[meal]
+default_side = "waffle_fries"
+default_size = "md"
+upcharge = 3.80
+
+# ---------------------------------------------------------------- families
+# A family groups look-alike items. Saying only the family word ("nuggets")
+# leaves the exact item unspecified. "regular" resolves to the family base.
+
+[[families]]
+id = "sandwich"
+base = "chicken_sandwich"
+aliases = ["sandwich"]
+
+[[families]]
+id = "nuggets"
+base = "nuggets_8"
+aliases = ["nuggets", "nugget", "nugs"]
+
+[[families]]
+id = "grilled_nuggets"
+base = "grilled_nuggets_8"
+aliases = ["grilled nuggets", "grilled nugget"]
+
+[[families]]
+id = "strips"
+base = "strips_3"
+aliases = ["strips", "chick n strips", "chicken strips", "tenders"]
+
+[[families]]
+id = "fries"
+base = "waffle_fries"
+aliases = []
+
+[[families]]
+id = "tea"
+base = "sweet_tea"
+aliases = ["tea", "iced tea"]
+
+[[families]]
+id = "lemonade"
+base = "lemonade"
+aliases = []
+
+[[families]]
+id = "cola"
+base = "cola"
+aliases = ["soda", "pop"]
+
+[[families]]
+id = "shake"
+base = "vanilla_shake"
+aliases = ["shake", "milkshake", "milk shake"]
+
+# ---------------------------------------------------------------- entrées
+
+[[items]]
+id = "chicken_sandwich"
+name = "Chicken Sandwich"
+pos = "CFA Sand"
+category = "entree"
+price = 5.29
+family = "sandwich"
+meal = true
+aliases = ["chicken sandwich", "original chicken sandwich", "classic chicken sandwich", "regular chicken sandwich", "plain chicken sandwich", "chick fil a sandwich", "chick fil a chicken sandwich"]
+modifiers = ["no_pickles", "extra_pickles", "add_cheese", "add_pepper_jack", "no_lettuce", "no_tomato"]
+
+[[items]]
+id = "spicy_sandwich"
+name = "Spicy Chicken Sandwich"
+pos = "Spcy Sand"
+category = "entree"
+price = 5.69
+family = "sandwich"
+meal = true
+aliases = ["spicy chicken sandwich", "spicy sandwich", "spicy chicken", "spicy"]
+modifiers = ["no_pickles", "extra_pickles", "add_cheese", "add_pepper_jack", "no_lettuce", "no_tomato"]
+
+[[items]]
+id = "deluxe_sandwich"
+name = "Deluxe Chicken Sandwich"
+pos = "CFA Dlx"
+category = "entree"
+price = 6.19
+family = "sandwich"
+meal = true
+aliases = ["deluxe chicken sandwich", "deluxe sandwich", "chicken deluxe", "deluxe"]
+modifiers = ["no_pickles", "extra_pickles", "add_cheese", "add_pepper_jack", "no_lettuce", "no_tomato"]
+
+[[items]]
+id = "spicy_deluxe"
+name = "Spicy Deluxe Sandwich"
+pos = "Spcy Dlx"
+category = "entree"
+price = 6.59
+family = "sandwich"
+meal = true
+aliases = ["spicy deluxe sandwich", "spicy deluxe chicken sandwich", "spicy chicken deluxe", "spicy deluxe"]
+modifiers = ["no_pickles", "extra_pickles", "add_cheese", "add_pepper_jack", "no_lettuce", "no_tomato"]
+
+[[items]]
+id = "grilled_sandwich"
+name = "Grilled Chicken Sandwich"
+pos = "Grl Sand"
+category = "entree"
+price = 7.29
+family = "sandwich"
+meal = true
+aliases = ["grilled chicken sandwich", "grilled sandwich", "grilled chicken"]
+modifiers = ["no_lettuce", "no_tomato", "add_cheese", "add_pepper_jack"]
+
+[[items]]
+id = "nuggets_8"
+name = "8 ct Nuggets"
+pos = "Nug 8ct"
+category = "entree"
+price = 5.35
+family = "nuggets"
+meal = true
+aliases = ["8 count nuggets", "8 count nugget", "8 count", "8 nuggets", "8 nugget", "8 count chicken nuggets"]
+modifiers = []
+
+[[items]]
+id = "nuggets_12"
+name = "12 ct Nuggets"
+pos = "Nug 12ct"
+category = "entree"
+price = 7.65
+family = "nuggets"
+meal = true
+aliases = ["12 count nuggets", "12 count nugget", "12 count", "12 nuggets", "12 nugget", "12 count chicken nuggets"]
+modifiers = []
+
+[[items]]
+id = "grilled_nuggets_8"
+name = "8 ct Grilled Nuggets"
+pos = "GNug 8ct"
+category = "entree"
+price = 6.25
+family = "grilled_nuggets"
+meal = true
+aliases = ["8 count grilled nuggets", "8 count grilled nugget", "8 grilled nuggets", "8 grilled nugget"]
+modifiers = []
+
+[[items]]
+id = "grilled_nuggets_12"
+name = "12 ct Grilled Nuggets"
+pos = "GNug 12ct"
+category = "entree"
+price = 8.95
+family = "grilled_nuggets"
+meal = true
+aliases = ["12 count grilled nuggets", "12 count grilled nugget", "12 grilled nuggets", "12 grilled nugget"]
+modifiers = []
+
+[[items]]
+id = "strips_3"
+name = "3 ct Strips"
+pos = "Strp 3ct"
+category = "entree"
+price = 5.45
+family = "strips"
+meal = true
+aliases = ["3 count strips", "3 count chick n strips", "3 strips", "3 chick n strips", "3 count tenders"]
+modifiers = []
+
+[[items]]
+id = "strips_4"
+name = "4 ct Strips"
+pos = "Strp 4ct"
+category = "entree"
+price = 6.95
+family = "strips"
+meal = true
+aliases = ["4 count strips", "4 count chick n strips", "4 strips", "4 chick n strips", "4 count tenders"]
+modifiers = []
+
+[[items]]
+id = "cool_wrap"
+name = "Cool Wrap"
+pos = "Cool Wrap"
+category = "entree"
+price = 8.49
+family = "cool_wrap"
+meal = true
+aliases = ["cool wrap", "wrap", "grilled cool wrap"]
+modifiers = []
+
+# ---------------------------------------------------------------- sides
+
+[[items]]
+id = "waffle_fries"
+name = "Waffle Fries"
+pos = "Fries"
+category = "side"
+price = 2.65
+sized = true
+family = "fries"
+aliases = ["waffle fries", "waffle fry", "waffle potato fries", "fries", "fry"]
+modifiers = []
+
+[[items]]
+id = "mac_and_cheese"
+name = "Mac & Cheese"
+pos = "Mac&Chs"
+category = "side"
+price = 3.59
+sized = true
+family = "mac_and_cheese"
+aliases = ["mac and cheese", "mac n cheese", "macaroni and cheese", "mac"]
+modifiers = []
+
+[[items]]
+id = "fruit_cup"
+name = "Fruit Cup"
+pos = "Fruit"
+category = "side"
+price = 3.29
+sized = true
+family = "fruit_cup"
+aliases = ["fruit cup", "fruit"]
+modifiers = []
+
+[[items]]
+id = "side_salad"
+name = "Side Salad"
+pos = "Side Sld"
+category = "side"
+price = 4.19
+family = "side_salad"
+aliases = ["side salad", "salad"]
+modifiers = []
+
+# ---------------------------------------------------------------- sauces
+
+[[items]]
+id = "cfa_sauce"
+name = "Chick-fil-A Sauce"
+pos = "CFA Sauce"
+category = "sauce"
+price = 0.0
+family = "cfa_sauce"
+aliases = ["chick fil a sauce", "chick fil a sauces", "cfa sauce"]
+modifiers = []
+
+[[items]]
+id = "polynesian"
+name = "Polynesian"
+pos = "Poly Sauce"
+category = "sauce"
+price = 0.0
+family = "polynesian"
+aliases = ["polynesian sauce", "polynesian", "poly sauce", "poly"]
+modifiers = []
+
+[[items]]
+id = "honey_mustard"
+name = "Honey Mustard"
+pos = "HnyMstrd"
+category = "sauce"
+price = 0.0
+family = "honey_mustard"
+aliases = ["honey mustard sauce", "honey mustard"]
+modifiers = []
+
+[[items]]
+id = "garden_herb_ranch"
+name = "Garden Herb Ranch"
+pos = "Ranch"
+category = "sauce"
+price = 0.0
+family = "garden_herb_ranch"
+aliases = ["garden herb ranch sauce", "garden herb ranch", "ranch sauce", "ranch"]
+modifiers = []
+
+[[items]]
+id = "barbeque"
+name = "Barbeque"
+pos = "BBQ"
+category = "sauce"
+price = 0.0
+family = "barbeque"
+aliases = ["barbeque sauce", "barbecue sauce", "bbq sauce", "barbeque", "barbecue", "bbq"]
+modifiers = []
+
+[[items]]
+id = "zesty_buffalo"
+name = "Zesty Buffalo"
+pos = "Zst Bflo"
+category = "sauce"
+price = 0.0
+family = "zesty_buffalo"
+aliases = ["zesty buffalo sauce", "zesty buffalo", "buffalo sauce", "buffalo"]
+modifiers = []
+
+[[items]]
+id = "sriracha"
+name = "Sweet & Spicy Sriracha"
+pos = "Sriracha"
+category = "sauce"
+price = 0.0
+family = "sriracha"
+aliases = ["sweet and spicy sriracha sauce", "sweet and spicy sriracha", "sriracha sauce", "sriracha"]
+modifiers = []
+
+[[items]]
+id = "honey_roasted_bbq"
+name = "Honey Roasted BBQ"
+pos = "HR BBQ"
+category = "sauce"
+price = 0.0
+family = "honey_roasted_bbq"
+aliases = ["honey roasted bbq sauce", "honey roasted barbecue sauce", "honey roasted barbeque sauce", "honey roasted bbq", "honey roasted barbecue", "honey roasted barbeque"]
+modifiers = []
+
+# ---------------------------------------------------------------- drinks
+
+[[items]]
+id = "sweet_tea"
+name = "Sweet Tea"
+pos = "Swt Tea"
+category = "drink"
+price = 2.25
+sized = true
+family = "tea"
+aliases = ["sweet tea", "sweet iced tea", "sweetened tea"]
+modifiers = ["no_ice", "light_ice", "extra_ice", "add_lemon"]
+
+[[items]]
+id = "unsweet_tea"
+name = "Unsweet Tea"
+pos = "Unswt Tea"
+category = "drink"
+price = 2.25
+sized = true
+family = "tea"
+aliases = ["unsweet tea", "unsweetened tea", "unsweet iced tea", "unsweetened iced tea", "unsweet"]
+modifiers = ["no_ice", "light_ice", "extra_ice", "add_lemon"]
+
+[[items]]
+id = "lemonade"
+name = "Lemonade"
+pos = "Lmnade"
+category = "drink"
+price = 2.75
+sized = true
+family = "lemonade"
+aliases = ["lemonade", "regular lemonade", "classic lemonade"]
+modifiers = ["no_ice", "light_ice", "extra_ice"]
+
+[[items]]
+id = "diet_lemonade"
+name = "Diet Lemonade"
+pos = "D Lmnade"
+category = "drink"
+price = 2.75
+sized = true
+family = "lemonade"
+aliases = ["diet lemonade"]
+modifiers = ["no_ice", "light_ice", "extra_ice"]
+
+[[items]]
+id = "sunjoy"
+name = "Sunjoy"
+pos = "Sunjoy"
+category = "drink"
+price = 2.75
+sized = true
+family = "sunjoy"
+aliases = ["sunjoy", "sun joy", "half and half", "arnold palmer"]
+modifiers = ["no_ice", "light_ice", "extra_ice"]
+
+[[items]]
+id = "cola"
+name = "Cola"
+pos = "Cola"
+category = "drink"
+price = 2.25
+sized = true
+family = "cola"
+aliases = ["coke", "coca cola", "cola"]
+modifiers = ["no_ice", "light_ice", "extra_ice"]
+
+[[items]]
+id = "diet_cola"
+name = "Diet Cola"
+pos = "D Cola"
+category = "drink"
+price = 2.25
+sized = true
+family = "cola"
+aliases = ["diet coke", "diet coca cola", "diet cola"]
+modifiers = ["no_ice", "light_ice", "extra_ice"]
+
+[[items]]
+id = "lemon_lime"
+name = "Lemon-Lime Soda"
+pos = "LmnLime"
+category = "drink"
+price = 2.25
+sized = true
+family = "lemon_lime"
+aliases = ["sprite", "lemon lime", "lemon lime soda"]
+modifiers = ["no_ice", "light_ice", "extra_ice"]
+
+[[items]]
+id = "dr_pepper"
+name = "Dr Pepper"
+pos = "Dr Ppr"
+category = "drink"
+price = 2.25
+sized = true
+family = "dr_pepper"
+aliases = ["dr pepper", "doctor pepper"]
+modifiers = ["no_ice", "light_ice", "extra_ice"]
+
+[[items]]
+id = "water"
+name = "Cup of Water"
+pos = "Water"
+category = "drink"
+price = 0.0
+family = "water"
+aliases = ["cup of water", "water", "ice water"]
+modifiers = ["no_ice", "light_ice", "add_lemon"]
+
+# ---------------------------------------------------------------- desserts
+
+[[items]]
+id = "cookies_cream_shake"
+name = "Cookies & Cream Milkshake"
+pos = "MlkShk C&C"
+category = "dessert"
+price = 4.75
+family = "shake"
+aliases = ["cookies and cream milkshake", "cookies and cream shake", "cookies and cream", "cookies n cream shake", "cookies n cream milkshake", "cookies n cream"]
+modifiers = ["no_whipped_cream", "no_cherry"]
+
+[[items]]
+id = "chocolate_shake"
+name = "Chocolate Milkshake"
+pos = "MlkShk Choc"
+category = "dessert"
+price = 4.75
+family = "shake"
+aliases = ["chocolate milkshake", "chocolate shake", "chocolate milk shake"]
+modifiers = ["no_whipped_cream", "no_cherry"]
+
+[[items]]
+id = "vanilla_shake"
+name = "Vanilla Milkshake"
+pos = "MlkShk Van"
+category = "dessert"
+price = 4.75
+family = "shake"
+aliases = ["vanilla milkshake", "vanilla shake", "vanilla milk shake"]
+modifiers = ["no_whipped_cream", "no_cherry"]
+
+[[items]]
+id = "strawberry_shake"
+name = "Strawberry Milkshake"
+pos = "MlkShk Strw"
+category = "dessert"
+price = 4.75
+family = "shake"
+aliases = ["strawberry milkshake", "strawberry shake", "strawberry milk shake"]
+modifiers = ["no_whipped_cream", "no_cherry"]
+
+[[items]]
+id = "peach_shake"
+name = "Peach Milkshake"
+pos = "MlkShk Pch"
+category = "dessert"
+price = 5.25
+family = "shake"
+aliases = ["peach milkshake", "peach shake", "peach milk shake", "seasonal peach milkshake", "seasonal milkshake", "seasonal shake"]
+modifiers = ["no_whipped_cream", "no_cherry"]
+
+[[items]]
+id = "cookie"
+name = "Cookie"
+pos = "Cookie"
+category = "dessert"
+price = 1.79
+family = "cookie"
+aliases = ["chocolate chunk cookie", "chocolate chip cookie", "cookie", "cookies"]
+modifiers = []
+
+[[items]]
+id = "frosted_lemonade"
+name = "Frosted Lemonade"
+pos = "Frst Lmnd"
+category = "dessert"
+price = 4.95
+family = "frosted_lemonade"
+aliases = ["frosted lemonade", "frosted lemonades"]
+modifiers = []
+
+# ---------------------------------------------------------------- modifiers
+
+[[modifiers]]
+id = "no_pickles"
+name = "No Pickles"
+aliases = ["no pickles", "no pickle", "hold the pickles", "hold the pickle", "without pickles", "without the pickles"]
+
+[[modifiers]]
+id = "extra_pickles"
+name = "Extra Pickles"
+aliases = ["extra pickles", "extra pickle", "add pickles"]
+
+[[modifiers]]
+id = "add_cheese"
+name = "Add Cheese"
+aliases = ["add cheese", "with cheese", "add american cheese", "with american cheese", "add colby jack", "with colby jack"]
+
+[[modifiers]]
+id = "add_pepper_jack"
+name = "Add Pepper Jack"
+aliases = ["add pepper jack", "with pepper jack", "pepper jack cheese", "pepper jack"]
+
+[[modifiers]]
+id = "no_lettuce"
+name = "No Lettuce"
+aliases = ["no lettuce", "hold the lettuce", "without lettuce", "without the lettuce"]
+
+[[modifiers]]
+id = "no_tomato"
+name = "No Tomato"
+aliases = ["no tomato", "no tomatoes", "hold the tomato", "hold the tomatoes", "without tomato", "without tomatoes"]
+
+[[modifiers]]
+id = "no_ice"
+name = "No Ice"
+aliases = ["no ice", "without ice", "hold the ice"]
+
+[[modifiers]]
+id = "light_ice"
+name = "Light Ice"
+aliases = ["light ice", "easy ice", "less ice", "a little ice"]
+
+[[modifiers]]
+id = "extra_ice"
+name = "Extra Ice"
+aliases = ["extra ice", "lots of ice", "more ice"]
+
+[[modifiers]]
+id = "add_lemon"
+name = "Add Lemon"
+aliases = ["add lemon", "with lemon", "lemon wedge", "with a lemon", "extra lemon"]
+
+[[modifiers]]
+id = "no_whipped_cream"
+name = "No Whipped Cream"
+aliases = ["no whipped cream", "no whip", "without whipped cream", "hold the whipped cream"]
+
+[[modifiers]]
+id = "no_cherry"
+name = "No Cherry"
+aliases = ["no cherry", "without the cherry", "hold the cherry"]
+
+# ---------------------------------------------------------------- standards (optional)
+
+[[standards]]
+id = "my_pleasure"
+kind = "phrase"
+phrases = ["my pleasure"]
+
+[[standards]]
+id = "offered_lto"
+kind = "offer_lto"
+phrases = []

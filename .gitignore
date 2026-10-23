@@ -5,3 +5,8 @@ data/
 eval/cases/
 eval/report*
 .DS_Store
+
+
+# Added by cargo
+
+/target
