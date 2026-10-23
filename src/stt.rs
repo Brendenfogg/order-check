@@ -26,7 +26,10 @@ pub struct WhisperTranscriber {
 
 impl WhisperTranscriber {
     pub fn new(model: &Path) -> anyhow::Result<Self> {
-        whisper_rs::install_logging_hooks();
+        // OC_WHISPER_LOG=1 shows whisper.cpp's own logs (GPU backend, timings).
+        if std::env::var("OC_WHISPER_LOG").is_err() {
+            whisper_rs::install_logging_hooks();
+        }
         let path = model
             .to_str()
             .ok_or_else(|| anyhow::anyhow!("model path is not UTF-8"))?;
@@ -80,10 +83,10 @@ impl Transcriber for WhisperTranscriber {
                     .map_err(|e| anyhow::anyhow!("whisper text: {e}"))?,
             );
             for t in 0..seg.n_tokens() {
-                if let Some(tok) = seg.get_token(t) {
-                    if tok.token_id() < self.eot {
-                        probs.push(tok.token_probability());
-                    }
+                if let Some(tok) = seg.get_token(t)
+                    && tok.token_id() < self.eot
+                {
+                    probs.push(tok.token_probability());
                 }
             }
         }

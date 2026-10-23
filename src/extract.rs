@@ -32,6 +32,9 @@ pub struct SpokenLine {
     pub item: Option<String>,
     pub family: String,
     pub qty: Option<u32>,
+    /// The quantity was actually said (a number or "a"), not just implied.
+    #[serde(skip)]
+    pub qty_said: bool,
     pub size: Option<Size>,
     pub modifiers: Vec<String>,
     pub meal: Option<SpokenMeal>,
@@ -47,6 +50,13 @@ pub struct SpokenOrder {
 
 /// Words that put a side into a meal instead of ordering it separately.
 const SIDE_SWAP_WORDS: &[&str] = &["with", "sub", "substitute"];
+/// "sub mac and cheese for the fries": the item after these is being replaced, not ordered.
+const SWAP_SOURCE: &[&[&str]] = &[
+    &["for", "the"],
+    &["for"],
+    &["instead", "of"],
+    &["instead", "of", "the"],
+];
 
 pub fn extract(menu: &Menu, matcher: &Matcher, utts: &[Utterance]) -> SpokenOrder {
     let mut ex = Extractor {
@@ -88,6 +98,7 @@ struct Phrase {
     kind: PhraseKind,
     qty: Option<u32>,
     qty_from_number: bool,
+    qty_said: bool,
     size: Option<Size>,
     meal: bool,
     meal_size: Option<Size>,
@@ -138,6 +149,7 @@ fn group(menu: &Menu, tokens: &[String], ms: &[Mention]) -> Vec<Unit> {
             },
             qty: None,
             qty_from_number: false,
+            qty_said: false,
             size: None,
             meal: false,
             meal_size: None,
@@ -159,18 +171,37 @@ fn group(menu: &Menu, tokens: &[String], ms: &[Mention]) -> Vec<Unit> {
                 MentionKind::Quantity(q) => {
                     p.qty = Some(q);
                     p.qty_from_number = true;
+                    p.qty_said = true;
                     used[first - 1] = true;
                     first -= 1;
                 }
                 MentionKind::Article => {
                     p.qty = Some(1);
+                    p.qty_said = true;
                     used[first - 1] = true;
                     first -= 1;
                 }
                 _ => {}
             }
         }
+        // A singular item named with no number means one ("spicy deluxe meal").
+        if p.qty.is_none() && !ms[j].plural && matches!(p.kind, PhraseKind::Item(_)) {
+            p.qty = Some(1);
+        }
         let start_tok = ms[first].start;
+        let is_swap_source = SWAP_SOURCE.iter().any(|w| {
+            start_tok >= w.len()
+                && tokens[start_tok - w.len()..start_tok]
+                    .iter()
+                    .zip(w.iter())
+                    .all(|(a, b)| a == b)
+        });
+        if is_swap_source && phrase_category(menu, &p) == Some(Category::Side) {
+            for u in used.iter_mut().take(j + 1).skip(first) {
+                *u = true;
+            }
+            continue;
+        }
         p.side_swap = (1..=2).any(|back| {
             start_tok >= back && SIDE_SWAP_WORDS.contains(&tokens[start_tok - back].as_str())
         });
@@ -260,8 +291,9 @@ impl<'a> Extractor<'a> {
             }
         }
 
-        let (mut offer, mut correcting, mut removing, mut additive, mut negate) =
-            (false, false, false, false, false);
+        let (mut offer, mut correcting, mut removing, mut additive, mut negate, mut every) =
+            (false, false, false, false, false, false);
+        let mut touched: Vec<Target> = Vec::new();
         for unit in units {
             match unit {
                 Unit::Other(MentionKind::Cue(cue)) => match cue {
@@ -270,11 +302,18 @@ impl<'a> Extractor<'a> {
                     Cue::Removal => removing = true,
                     Cue::Additive => additive = true,
                     Cue::Negation => negate = true,
+                    Cue::Every => every = true,
                     Cue::Accept | Cue::Decline => {}
                 },
                 Unit::Other(MentionKind::Modifier(id)) => self.attach_modifier(&id),
                 Unit::Other(MentionKind::Meal) if correcting => self.make_meal(),
                 Unit::Other(MentionKind::Size(s)) if correcting => self.correct_size(s),
+                Unit::Other(MentionKind::Size(s)) if every => {
+                    for t in &touched {
+                        self.fill_size(*t, s);
+                    }
+                    every = false;
+                }
                 Unit::Other(MentionKind::Quantity(q)) if correcting => {
                     if let Some(i) = self.target_line() {
                         self.order.lines[i].qty = Some(q);
@@ -306,8 +345,16 @@ impl<'a> Extractor<'a> {
                     } else if correcting && self.correct_with(&p, conf) {
                         correcting = false;
                     } else {
+                        if additive {
+                            // "one more cookie" / "another cookie" is one more, even with no number.
+                            if p.qty.is_none() || !p.qty_said {
+                                p.qty = Some(1);
+                                p.qty_said = true;
+                            }
+                        }
                         self.add(p, conf, additive);
                         additive = false;
+                        touched.extend(self.target);
                     }
                 }
             }
@@ -384,6 +431,7 @@ impl<'a> Extractor<'a> {
             item: Self::item_of(&p),
             family: self.family_of(&p),
             qty: p.qty,
+            qty_said: p.qty_said,
             size: p.size,
             modifiers: Vec::new(),
             meal: p.meal.then_some(SpokenMeal {
@@ -415,13 +463,43 @@ impl<'a> Extractor<'a> {
         if !is_drink && !is_side {
             return false;
         }
-        let comp = self.component(p, conf);
         let Some(meal) = self.order.lines[mi].meal.as_ref() else {
             return false;
         };
         let slot = if is_drink { &meal.drink } else { &meal.side };
         match slot {
+            Some(existing) if self.compatible(&existing.item, &existing.family, p) => {
+                self.merge_component(mi, is_drink, p, conf);
+                true
+            }
+            Some(_) => false,
             None if is_drink || p.side_swap => {
+                let mut comp = self.component(p, conf);
+                let mut mi = mi;
+                // A read-back that names the drink with the meal means the
+                // drink said earlier on its own was the meal's drink.
+                let standalone = (0..self.order.lines.len()).find(|&j| {
+                    let l = &self.order.lines[j];
+                    j != mi
+                        && l.meal.is_none()
+                        && l.item
+                            .as_deref()
+                            .and_then(|id| self.menu.item(id))
+                            .map(|i| i.category)
+                            == category
+                        && self.compatible(&l.item, &l.family, p)
+                });
+                if let Some(j) = standalone {
+                    let l = self.order.lines.remove(j);
+                    if j < mi {
+                        mi -= 1;
+                    }
+                    comp.item = comp.item.or(l.item);
+                    comp.size = l.size.or(comp.size);
+                    comp.modifiers = l.modifiers;
+                    comp.confidence = comp.confidence.max(l.confidence);
+                    self.open_meal = Some(mi);
+                }
                 let meal = self.order.lines[mi].meal.as_mut().unwrap();
                 if is_drink {
                     meal.drink = Some(comp)
@@ -435,11 +513,7 @@ impl<'a> Extractor<'a> {
                 });
                 true
             }
-            Some(existing) if self.compatible(&existing.item, &existing.family, p) => {
-                self.merge_component(mi, is_drink, p, conf);
-                true
-            }
-            _ => false,
+            None => false,
         }
     }
 
@@ -481,7 +555,13 @@ impl<'a> Extractor<'a> {
         let item = Self::item_of(p);
         let l = &mut self.order.lines[i];
         l.item = l.item.take().or(item);
-        l.qty = l.qty.or(p.qty);
+        if !l.qty_said && p.qty_said {
+            // A spoken number beats one that was only implied.
+            l.qty = p.qty;
+            l.qty_said = true;
+        } else {
+            l.qty = l.qty.or(p.qty);
+        }
         l.size = l.size.or(p.size);
         l.meal_size = l.meal_size.or(p.meal_size);
         if p.meal && l.meal.is_none() {
@@ -581,6 +661,38 @@ impl<'a> Extractor<'a> {
             }
         }
         false
+    }
+
+    /// Sets a size on a sized item that doesn't have one yet ("both medium").
+    fn fill_size(&mut self, t: Target, s: Size) {
+        let menu = self.menu;
+        let sized = |id: &Option<String>| {
+            id.as_deref()
+                .and_then(|id| menu.item(id))
+                .is_some_and(|i| i.sized)
+        };
+        let Some(l) = self.order.lines.get_mut(match t {
+            Target::Line(i) | Target::Drink(i) | Target::Side(i) => i,
+        }) else {
+            return;
+        };
+        match t {
+            Target::Line(_) if sized(&l.item) && l.size.is_none() => l.size = Some(s),
+            Target::Drink(_) | Target::Side(_) => {
+                let meal = l.meal.as_mut();
+                let c = meal.and_then(|m| {
+                    if matches!(t, Target::Drink(_)) {
+                        m.drink.as_mut()
+                    } else {
+                        m.side.as_mut()
+                    }
+                });
+                if let Some(c) = c.filter(|c| c.size.is_none()) {
+                    c.size = Some(s);
+                }
+            }
+            _ => {}
+        }
     }
 
     fn correct_size(&mut self, s: Size) {
@@ -869,6 +981,100 @@ mod tests {
     fn large_meal_size() {
         let o = ex(&["a large 8 count nugget meal with a sunjoy"]);
         assert_eq!(o.lines[0].meal_size, Some(Size::Lg));
+    }
+
+    #[test]
+    fn misheard_no_wait_still_corrects() {
+        let o = ex(&["Let me get a spicy chicken sandwich, no weight, regular, not spicy"]);
+        assert_eq!(ids(&o), [Some("chicken_sandwich")]);
+    }
+
+    #[test]
+    fn substitution_source_is_not_ordered() {
+        let o = ex(&[
+            "A grilled chicken sandwich meal, but sub mac and cheese for the fries, and a medium unsweet tea",
+        ]);
+        assert_eq!(ids(&o), [Some("grilled_sandwich")]);
+        let meal = o.lines[0].meal.as_ref().unwrap();
+        assert_eq!(
+            meal.side.as_ref().unwrap().item.as_deref(),
+            Some("mac_and_cheese")
+        );
+    }
+
+    #[test]
+    fn one_more_then_readback_totals_two() {
+        let o = ex(&[
+            "a cookies and cream milkshake",
+            "and one more cookies and cream",
+            "so two cookies and cream",
+        ]);
+        let total: u32 = o
+            .lines
+            .iter()
+            .filter(|l| l.item.as_deref() == Some("cookies_cream_shake"))
+            .map(|l| l.qty.unwrap_or(1))
+            .sum();
+        assert_eq!(total, 2, "{o:#?}");
+    }
+
+    #[test]
+    fn readback_moves_drink_into_meal() {
+        let o = ex(&[
+            "Chicken sandwich, add pepper jack, and a large coke",
+            "Chicken sandwich meal, add pepper jack, large coke",
+        ]);
+        assert_eq!(ids(&o), [Some("chicken_sandwich")], "{o:#?}");
+        let d = drink(&o.lines[0]);
+        assert_eq!((d.item.as_deref(), d.size), (Some("cola"), Some(Size::Lg)));
+    }
+
+    #[test]
+    fn chicken_strips_count_is_the_item_not_quantity() {
+        let o = ex(&[
+            "Hi, a 4-count chicken strips and 2 sriracha sauces",
+            "4-count strips and 2 sriracha",
+        ]);
+        assert_eq!(ids(&o), [Some("strips_4"), Some("sriracha")]);
+        assert_eq!(o.lines[0].qty, Some(1));
+    }
+
+    #[test]
+    fn singular_item_without_number_is_one() {
+        let o = ex(&["Large deluxe meal with a Dr Pepper, no tomato"]);
+        assert_eq!(o.lines[0].qty, Some(1));
+    }
+
+    #[test]
+    fn plural_without_number_stays_unspecified() {
+        let o = ex(&["and polynesian sauces please"]);
+        assert_eq!(o.lines[0].qty, None);
+    }
+
+    #[test]
+    fn spoken_number_beats_implied_one() {
+        let o = ex(&[
+            "A strawberry shake & cookies & cream shake",
+            "So 1 strawberry & 2 cookies & cream",
+        ]);
+        let cc = o
+            .lines
+            .iter()
+            .find(|l| l.item.as_deref() == Some("cookies_cream_shake"))
+            .unwrap();
+        assert_eq!(cc.qty, Some(2));
+    }
+
+    #[test]
+    fn both_size_applies_to_each_item() {
+        let o = ex(&["One diet lemonade and one regular lemonade, both medium"]);
+        assert!(o.lines.iter().all(|l| l.size == Some(Size::Md)), "{o:#?}");
+    }
+
+    #[test]
+    fn grill_nuggets() {
+        let o = ex(&["12-count grill nuggets and a large diet coke"]);
+        assert_eq!(ids(&o), [Some("grilled_nuggets_12"), Some("diet_cola")]);
     }
 
     #[test]

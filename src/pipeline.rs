@@ -33,11 +33,7 @@ pub fn check_utterances(
 ) -> CheckReport {
     let started = Instant::now();
     let spoken = extract(menu, matcher, &utts);
-    let confidence = utts
-        .iter()
-        .map(|u| u.confidence)
-        .fold(None, |m: Option<f32>, c| Some(m.map_or(c, |m| m.min(c))));
-    let result = verify(menu, &spoken, ticket, confidence.unwrap_or(0.0));
+    let result = verify(menu, &spoken, ticket, transcript_confidence(&utts));
     let standards = standards_on.then(|| check_standards(menu, &utts, &spoken));
     CheckReport {
         result,
@@ -45,6 +41,19 @@ pub fn check_utterances(
         transcript: utts,
         verify_ms: started.elapsed().as_millis() as u32,
     }
+}
+
+/// How sure Whisper was about the order overall: confidence weighted by text
+/// length, so a mumbled "my pleasure" doesn't outweigh the order itself.
+pub fn transcript_confidence(utts: &[Utterance]) -> f32 {
+    let chars: usize = utts.iter().map(|u| u.text.len()).sum();
+    if chars == 0 {
+        return 0.0;
+    }
+    utts.iter()
+        .map(|u| u.confidence * u.text.len() as f32)
+        .sum::<f32>()
+        / chars as f32
 }
 
 pub fn transcribe_segments(
@@ -77,4 +86,38 @@ pub fn prompt_for(menu: &Menu, earlier: &[Utterance]) -> String {
     format!("{} {}", menu.vocabulary_prompt(), &said[tail_start..])
         .trim()
         .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::menu::cfa;
+    use crate::verify::Outcome;
+
+    #[test]
+    fn short_low_confidence_line_does_not_hide_extras() {
+        let menu = cfa();
+        let utts = vec![
+            Utterance {
+                text: "Hi, what can I get for you?".into(),
+                confidence: 0.9,
+            },
+            Utterance {
+                text: "A side salad and a small Sprite".into(),
+                confidence: 0.86,
+            },
+            Utterance {
+                text: "My pleasure".into(),
+                confidence: 0.48,
+            },
+        ];
+        let ticket: Ticket = serde_json::from_value(serde_json::json!({"lines": [
+            {"item": "side_salad", "qty": 1}, {"item": "lemon_lime", "qty": 1, "size": "sm"}, {"item": "cookie", "qty": 1}]})).unwrap();
+        let r = check_utterances(&menu, &Matcher::new(&menu), utts, &ticket, false);
+        assert_eq!(r.result.outcome, Outcome::Mismatch, "{:#?}", r.result);
+        assert_eq!(
+            r.result.mismatches[0].message,
+            "Rang 1 Cookie, guest didn't ask"
+        );
+    }
 }

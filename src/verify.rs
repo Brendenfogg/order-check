@@ -6,7 +6,23 @@ use crate::extract::{SpokenComponent, SpokenOrder};
 use crate::menu::{Menu, Size};
 use crate::ticket::{Ticket, TicketComponent};
 
-pub const MIN_CONFIDENCE: f32 = 0.6;
+/// Below this, a mismatch is reported as "couldn't confirm" instead of buzzing.
+/// Whisper's token probabilities run lower on short phrases, so this sits at 0.5.
+pub const MIN_CONFIDENCE: f32 = 0.5;
+
+/// Not hearing something is weaker evidence than hearing something else, so
+/// "rang X, guest didn't ask" (and a meal or modifier that wasn't heard) only
+/// buzzes when the whole transcript came through clearly. Tuned on the eval
+/// set: 0.75 keeps false alarms on clean audio under 5%.
+pub const ABSENCE_MIN_CONFIDENCE: f32 = 0.75;
+
+fn absence_conf(transcript_confidence: f32) -> f32 {
+    if transcript_confidence >= ABSENCE_MIN_CONFIDENCE {
+        transcript_confidence
+    } else {
+        0.0
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -321,7 +337,51 @@ pub fn verify(
             let Some(ri) = best else { continue };
             said_used[si] = true;
             rang_used[ri] = true;
-            compare_pair(&namer, s, &rang[ri], pass_family, &mut found);
+            let mut s = s.clone();
+            let mut r = rang[ri].clone();
+            // "a diet lemonade and a lemonade" rung as two lemonades: the
+            // extra count is really a look-alike, so report it as one.
+            if let (false, Some(a), Some(b)) = (pass_family, s.qty, r.qty) {
+                if b > a {
+                    let mate = (0..said.len()).find(|&j| {
+                        let m = &said[j];
+                        !said_used[j]
+                            && m.family == s.family
+                            && m.item.is_some()
+                            && m.item != s.item
+                            && m.qty.is_none_or(|q| q == b - a)
+                            // only if nothing on the ticket is that item already
+                            && !(0..rang.len()).any(|k| !rang_used[k] && rang[k].item == m.item)
+                    });
+                    if let Some(j) = mate {
+                        said_used[j] = true;
+                        found.push((lookalike(&namer, &said[j], &r), said[j].confidence));
+                        r.qty = Some(a);
+                    }
+                } else if a > b {
+                    let mate = (0..rang.len()).find(|&j| {
+                        let m = &rang[j];
+                        !rang_used[j]
+                            && m.family == s.family
+                            && m.item != s.item
+                            && m.qty == Some(a - b)
+                            && !(0..said.len()).any(|k| !said_used[k] && said[k].item == m.item)
+                    });
+                    if let Some(j) = mate {
+                        rang_used[j] = true;
+                        found.push((lookalike(&namer, &s, &rang[j]), s.confidence));
+                        s.qty = Some(b);
+                    }
+                }
+            }
+            compare_pair(
+                &namer,
+                &s,
+                &r,
+                pass_family,
+                transcript_confidence,
+                &mut found,
+            );
         }
     }
 
@@ -344,7 +404,7 @@ pub fn verify(
     let extra_confidence = if nothing_heard {
         0.0
     } else {
-        transcript_confidence
+        absence_conf(transcript_confidence)
     };
     for (ri, r) in rang.iter().enumerate() {
         if rang_used[ri] || r.default_side {
@@ -400,15 +460,30 @@ pub fn verify(
     result
 }
 
+fn lookalike(namer: &Namer, s: &Unit, r: &Unit) -> Mismatch {
+    Mismatch {
+        kind: MismatchKind::Variant,
+        message: format!(
+            "Said {}, rang {}",
+            namer.base(s).to_uppercase(),
+            namer.base(r).to_uppercase()
+        ),
+        said: s.item.clone(),
+        rang: r.item.clone(),
+    }
+}
+
 fn compare_pair(
     namer: &Namer,
     s: &Unit,
     r: &Unit,
     same_family_only: bool,
+    transcript_confidence: f32,
     found: &mut Vec<(Mismatch, f32)>,
 ) {
-    let conf = s.confidence;
-    let mut push = |kind, message: String| {
+    let heard = s.confidence;
+    let unheard = s.confidence.min(absence_conf(transcript_confidence));
+    let mut push = |kind, message: String, conf: f32| {
         found.push((
             Mismatch {
                 kind,
@@ -421,6 +496,10 @@ fn compare_pair(
     };
     let variant = (same_family_only && s.item.is_some()) || s.role != r.role;
     if variant {
+        // Not hearing "meal" is weaker evidence than hearing a different item.
+        let meal_unheard = !same_family_only
+            && s.role == Role::Entree { meal: false }
+            && r.role == Role::Entree { meal: true };
         push(
             MismatchKind::Variant,
             format!(
@@ -428,15 +507,17 @@ fn compare_pair(
                 namer.base(s).to_uppercase(),
                 namer.base(r).to_uppercase()
             ),
+            if meal_unheard { unheard } else { heard },
         );
     }
-    if let (Some(a), Some(b)) = (s.qty, r.qty) {
-        if a != b {
-            push(
-                MismatchKind::Count,
-                format!("Said {a} {}, rang {b}", namer.base(s)),
-            );
-        }
+    if let (Some(a), Some(b)) = (s.qty, r.qty)
+        && a != b
+    {
+        push(
+            MismatchKind::Count,
+            format!("Said {a} {}, rang {b}", namer.base(s)),
+            heard,
+        );
     }
     let sized = s
         .item
@@ -444,20 +525,23 @@ fn compare_pair(
         .or(r.item.as_deref())
         .and_then(|id| namer.menu.item(id))
         .is_some_and(|i| i.sized);
-    if let Some(ss) = s.size {
-        if sized && Some(ss) != r.size {
-            let rang_word = r.size.map(|x| x.word()).unwrap_or("no size");
-            push(
-                MismatchKind::Size,
-                format!("Said {} {}, rang {rang_word}", ss.word(), namer.base(s)),
-            );
-        }
+    if let Some(ss) = s.size
+        && sized
+        && Some(ss) != r.size
+    {
+        let rang_word = r.size.map(|x| x.word()).unwrap_or("no size");
+        push(
+            MismatchKind::Size,
+            format!("Said {} {}, rang {rang_word}", ss.word(), namer.base(s)),
+            heard,
+        );
     }
     let item_name = namer.base(r);
     for m in s.modifiers.iter().filter(|m| !r.modifiers.contains(m)) {
         push(
             MismatchKind::Modifier,
             format!("Said {} on {item_name}, not on ticket", namer.modifier(m)),
+            heard,
         );
     }
     for m in r.modifiers.iter().filter(|m| !s.modifiers.contains(m)) {
@@ -467,6 +551,7 @@ fn compare_pair(
                 "Rang {} on {item_name}, guest didn't ask",
                 namer.modifier(m)
             ),
+            unheard,
         );
     }
 }
@@ -627,6 +712,46 @@ mod tests {
             serde_json::json!({"lines": [{"item": "polynesian", "qty": 1}, {"item": "polynesian", "qty": 2}]}),
         );
         assert_eq!(r.outcome, Outcome::Match, "{r:#?}");
+    }
+
+    #[test]
+    fn aggregated_lookalike_is_variant() {
+        let r = check(
+            &["a medium diet lemonade and a medium regular lemonade"],
+            serde_json::json!({"lines": [{"item": "lemonade", "qty": 1, "size": "md"}, {"item": "lemonade", "qty": 1, "size": "md"}]}),
+        );
+        assert_eq!(messages(&r), ["Said DIET LEMONADE, rang LEMONADE"]);
+    }
+
+    #[test]
+    fn count_is_not_mistaken_for_lookalike() {
+        let r = check(
+            &["a medium diet lemonade and a medium regular lemonade"],
+            serde_json::json!({"lines": [{"item": "diet_lemonade", "qty": 2, "size": "md"}, {"item": "lemonade", "qty": 1, "size": "md"}]}),
+        );
+        assert_eq!(messages(&r), ["Said 1 Diet Lemonade, rang 2"]);
+    }
+
+    #[test]
+    fn meal_not_heard_is_unconfirmed_unless_clear() {
+        let ticket = serde_json::json!({"lines": [meal("spicy_sandwich", "sweet_tea")]});
+        let muddy = check_at(&["a spicy chicken sandwich"], 0.7, ticket.clone());
+        assert_eq!(muddy.outcome, Outcome::Unconfirmed, "{muddy:#?}");
+        let clear = check_at(&["a spicy chicken sandwich"], 0.95, ticket);
+        assert_eq!(clear.outcome, Outcome::Mismatch, "{clear:#?}");
+    }
+
+    #[test]
+    fn extra_item_needs_a_clear_transcript() {
+        let ticket = serde_json::json!({"lines": [{"item": "lemonade", "qty": 1, "size": "lg"}, {"item": "cookie", "qty": 1}]});
+        assert_eq!(
+            check_at(&["a large lemonade"], 0.7, ticket.clone()).outcome,
+            Outcome::Unconfirmed
+        );
+        assert_eq!(
+            check_at(&["a large lemonade"], 0.95, ticket).outcome,
+            Outcome::Mismatch
+        );
     }
 
     #[test]

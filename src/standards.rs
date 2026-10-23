@@ -72,6 +72,6 @@ mod tests {
     #[test]
     fn guest_naming_the_lto_is_not_an_offer() {
         let r = run(&["Can I get a peach milkshake?"]);
-        assert_eq!(r["offered_lto"], false);
+        assert!(!r["offered_lto"]);
     }
 }

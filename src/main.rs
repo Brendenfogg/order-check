@@ -15,6 +15,10 @@ use order_check::session::{SessionConfig, Sessions};
 use order_check::stt::WhisperTranscriber;
 use order_check::ticket::Ticket;
 
+/// small.en meets the 1 s Finalize target on an M1 Pro; large-v3-turbo hears
+/// better in noise but takes ~1.5 s. See docs/results.md.
+const DEFAULT_MODEL: &str = "models/ggml-small.en.bin";
+
 #[derive(Parser)]
 #[command(
     name = "order-check",
@@ -31,7 +35,7 @@ enum Cmd {
     Check {
         #[arg(long, default_value = "menus/chick-fil-a.toml")]
         menu: PathBuf,
-        #[arg(long, default_value = "models/ggml-large-v3-turbo-q5_0.bin")]
+        #[arg(long, default_value = DEFAULT_MODEL)]
         model: PathBuf,
         #[arg(long)]
         audio: PathBuf,
@@ -41,11 +45,25 @@ enum Cmd {
         #[arg(long)]
         standards: bool,
     },
+    /// Run the evaluation set and write report.json + report.md.
+    Eval {
+        #[arg(long, default_value = "menus/chick-fil-a.toml")]
+        menu: PathBuf,
+        #[arg(long, default_value = DEFAULT_MODEL)]
+        model: PathBuf,
+        #[arg(long, default_value = "eval/cases")]
+        cases: PathBuf,
+        #[arg(long, default_value = "eval/report")]
+        out: PathBuf,
+        /// Reuse (and save) transcripts in this JSON file; skips Whisper for cached cases.
+        #[arg(long)]
+        transcripts: Option<PathBuf>,
+    },
     /// Run the in-restaurant server: live mic, order checks, POS and dashboard pages.
     Serve {
         #[arg(long, default_value = "menus/chick-fil-a.toml")]
         menu: PathBuf,
-        #[arg(long, default_value = "models/ggml-large-v3-turbo-q5_0.bin")]
+        #[arg(long, default_value = DEFAULT_MODEL)]
         model: PathBuf,
         #[arg(long, default_value = "data/records.db")]
         db: PathBuf,
@@ -95,6 +113,46 @@ fn main() -> anyhow::Result<()> {
                 report.verify_ms
             );
             println!("{}", serde_json::to_string_pretty(&report)?);
+        }
+        Cmd::Eval {
+            menu,
+            model,
+            cases,
+            out,
+            transcripts,
+        } => {
+            let menu = Menu::load(&menu)?;
+            let mut cache: order_check::eval::TranscriptCache = match &transcripts {
+                Some(p) if p.exists() => serde_json::from_str(&std::fs::read_to_string(p)?)?,
+                _ => Default::default(),
+            };
+            let stt = WhisperTranscriber::new(&model)?;
+            let report = order_check::eval::run_eval_cached(&menu, Some(&stt), &cases, &mut cache)?;
+            if let Some(p) = &transcripts {
+                std::fs::write(p, serde_json::to_string(&cache)?)?;
+            }
+            std::fs::create_dir_all(&out)?;
+            let model_name = model
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            std::fs::write(
+                out.join("report.json"),
+                serde_json::to_string_pretty(&report)?,
+            )?;
+            std::fs::write(
+                out.join("report.md"),
+                order_check::eval::render_markdown(&report, &model_name),
+            )?;
+            eprintln!(
+                "{} cases: caught {:.1}%, false alarms {:.1}%, extraction {:.1}%, p95 finalize {} ms -> {}",
+                report.cases,
+                report.catch_rate * 100.0,
+                report.false_alarm_rate * 100.0,
+                report.extraction_accuracy * 100.0,
+                report.p95_finalize_ms,
+                out.join("report.md").display()
+            );
         }
         Cmd::Serve {
             menu,

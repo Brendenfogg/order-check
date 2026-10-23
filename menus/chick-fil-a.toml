@@ -28,7 +28,7 @@ aliases = ["nuggets", "nugget", "nugs"]
 [[families]]
 id = "grilled_nuggets"
 base = "grilled_nuggets_8"
-aliases = ["grilled nuggets", "grilled nugget"]
+aliases = ["grilled nuggets", "grilled nugget", "grill nuggets", "grill nugget"]
 
 [[families]]
 id = "strips"
@@ -147,7 +147,7 @@ category = "entree"
 price = 6.25
 family = "grilled_nuggets"
 meal = true
-aliases = ["8 count grilled nuggets", "8 count grilled nugget", "8 grilled nuggets", "8 grilled nugget"]
+aliases = ["8 count grilled nuggets", "8 count grilled nugget", "8 grilled nuggets", "8 grilled nugget", "8 count grill nuggets", "8 count grill nugget"]
 modifiers = []
 
 [[items]]
@@ -158,7 +158,7 @@ category = "entree"
 price = 8.95
 family = "grilled_nuggets"
 meal = true
-aliases = ["12 count grilled nuggets", "12 count grilled nugget", "12 grilled nuggets", "12 grilled nugget"]
+aliases = ["12 count grilled nuggets", "12 count grilled nugget", "12 grilled nuggets", "12 grilled nugget", "12 count grill nuggets", "12 count grill nugget"]
 modifiers = []
 
 [[items]]
@@ -169,7 +169,7 @@ category = "entree"
 price = 5.45
 family = "strips"
 meal = true
-aliases = ["3 count strips", "3 count chick n strips", "3 strips", "3 chick n strips", "3 count tenders"]
+aliases = ["3 count strips", "3 count chick n strips", "3 count chicken strips", "3 strips", "3 chick n strips", "3 chicken strips", "3 count tenders"]
 modifiers = []
 
 [[items]]
@@ -180,7 +180,7 @@ category = "entree"
 price = 6.95
 family = "strips"
 meal = true
-aliases = ["4 count strips", "4 count chick n strips", "4 strips", "4 chick n strips", "4 count tenders"]
+aliases = ["4 count strips", "4 count chick n strips", "4 count chicken strips", "4 strips", "4 chick n strips", "4 chicken strips", "4 count tenders"]
 modifiers = []
 
 [[items]]

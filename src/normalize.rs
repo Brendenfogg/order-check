@@ -24,8 +24,16 @@ const NUMBER_WORDS: [&str; 21] = [
     "twenty",
 ];
 
-/// Words that mean "count" when they follow a number ("12 piece", "8ct").
-const COUNT_WORDS: [&str; 6] = ["count", "ct", "piece", "pieces", "pc", "pcs"];
+/// Words that mean "count" when they follow a number ("12 piece", "8ct"),
+/// including how Whisper tends to mishear it ("8 pound").
+const COUNT_WORDS: [&str; 10] = [
+    "count", "counts", "ct", "piece", "pieces", "pc", "pcs", "pound", "pounds", "cown",
+];
+
+/// Contractions that keep their apostrophe; any other "word's" is a stray possessive ("Strip's").
+const CONTRACTIONS: [&str; 10] = [
+    "that's", "it's", "what's", "let's", "there's", "here's", "he's", "she's", "who's", "how's",
+];
 
 /// Lowercased tokens with brand spelling, numbers and piece counts unified,
 /// so "a twelve-piece" and "a 12 ct" both become `a 12 count`.
@@ -48,6 +56,11 @@ pub fn normalize(text: &str) -> Vec<String> {
         if word.is_empty() {
             continue;
         }
+        let word = match word.strip_suffix("'s") {
+            Some(base) if !CONTRACTIONS.contains(&word) => format!("{base}s"),
+            _ => word.to_string(),
+        };
+        let word = word.as_str();
         // "8ct" -> "8" "ct"
         let digits: String = word.chars().take_while(|c| c.is_ascii_digit()).collect();
         if !digits.is_empty() && digits.len() < word.len() {
@@ -71,7 +84,10 @@ pub fn normalize(text: &str) -> Vec<String> {
             };
             continue;
         }
-        if let Some(n) = NUMBER_WORDS.iter().position(|nw| *nw == w) {
+        if w == "free" {
+            // Whisper hears "three" as "free" more often than anyone orders anything free.
+            out.push("3".into());
+        } else if let Some(n) = NUMBER_WORDS.iter().position(|nw| *nw == w) {
             out.push(n.to_string());
         } else if COUNT_WORDS.contains(&w)
             && out
@@ -172,6 +188,30 @@ mod tests {
     #[test]
     fn digits_with_punctuation() {
         assert_eq!(n("3, please"), ["3", "please"]);
+    }
+
+    #[test]
+    fn possessive_s_on_menu_words() {
+        assert_eq!(
+            n("a 4-count Strip's meal, that's it"),
+            ["a", "4", "count", "strips", "meal", "that's", "it"]
+        );
+    }
+
+    #[test]
+    fn misheard_count() {
+        assert_eq!(
+            n("an 8-pound grilled nuggets"),
+            ["an", "8", "count", "grilled", "nuggets"]
+        );
+    }
+
+    #[test]
+    fn free_is_three() {
+        assert_eq!(
+            n("free garden herb ranch"),
+            ["3", "garden", "herb", "ranch"]
+        );
     }
 
     #[test]

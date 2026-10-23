@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p models
 BASE=https://huggingface.co/ggerganov/whisper.cpp/resolve/main
-for m in ggml-large-v3-turbo-q5_0.bin ggml-base.en.bin; do
+for m in ggml-small.en.bin ggml-large-v3-turbo-q5_0.bin ggml-base.en.bin; do
   if [ -s "models/$m" ]; then
     echo "models/$m already present"
   else

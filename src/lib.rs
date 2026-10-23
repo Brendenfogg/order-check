@@ -1,6 +1,7 @@
 //! Order Check: verifies a spoken restaurant order against the POS ticket.
 
 pub mod audio;
+pub mod eval;
 pub mod extract;
 pub mod matcher;
 pub mod menu;

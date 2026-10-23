@@ -15,6 +15,8 @@ pub enum Cue {
     Decline,
     Additive,
     Negation,
+    /// "both" / "each": the next size applies to everything just named.
+    Every,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -36,6 +38,8 @@ pub struct Mention {
     pub start: usize,
     pub end: usize,
     pub score: f32,
+    /// Said in plural form ("sauces"), so no number means "unspecified", not one.
+    pub plural: bool,
 }
 
 /// Conversational phrases. These are English, not menu knowledge.
@@ -47,6 +51,7 @@ const CUES: &[(&str, Cue)] = &[
     ("change it", Cue::Correction),
     ("instead", Cue::Correction),
     ("no wait", Cue::Correction),
+    ("no weight", Cue::Correction), // how Whisper often hears "no wait"
     ("i mean", Cue::Correction),
     ("never mind", Cue::Removal),
     ("nevermind", Cue::Removal),
@@ -80,6 +85,9 @@ const CUES: &[(&str, Cue)] = &[
     ("also another", Cue::Additive),
     ("plus another", Cue::Additive),
     ("not", Cue::Negation),
+    ("both", Cue::Every),
+    ("each", Cue::Every),
+    ("all of them", Cue::Every),
 ];
 
 const SIZES: &[(&str, Size)] = &[
@@ -194,6 +202,7 @@ impl Matcher {
                     start: i,
                     end: i + 1,
                     score: 1.0,
+                    plural: false,
                 });
                 i += 1;
             } else {
@@ -217,6 +226,7 @@ impl Matcher {
                     start: i,
                     end: i + n,
                     score: 1.0,
+                    plural: is_plural(gram),
                 });
             }
         }
@@ -257,6 +267,7 @@ impl Matcher {
             start: i,
             end: i + n,
             score: score.min(FUZZY_MAX_SCORE) as f32,
+            plural: is_plural(&tokens[i..i + n]),
         })
     }
 }
@@ -271,6 +282,15 @@ fn push_fuzzy(fuzzy: &mut Vec<FuzzyEntry>, phrase: &str, kind: MentionKind) {
             kind,
         });
     }
+}
+
+/// "sauces", "cookies" — but not "8 count nuggets", which names one item.
+fn is_plural(gram: &[String]) -> bool {
+    let last = gram.last().map(String::as_str).unwrap_or("");
+    last.len() > 3
+        && last.ends_with('s')
+        && !last.ends_with("ss")
+        && !gram.iter().any(|t| t == "count")
 }
 
 /// The n-gram with a plural `s` dropped from its last token, if it has one.
