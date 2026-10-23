@@ -6,6 +6,7 @@ pub mod matcher;
 pub mod menu;
 pub mod normalize;
 pub mod pipeline;
+pub mod records;
 pub mod standards;
 pub mod stt;
 pub mod ticket;
