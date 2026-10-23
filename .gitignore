@@ -1,0 +1,7 @@
+target/
+models/
+data/
+.superpowers/
+eval/cases/
+eval/report*
+.DS_Store
